@@ -53,7 +53,8 @@ sub perform {
   # Prompt operator - abort if not confirmed
   print "Type YES to confirm credential rotation (anything else aborts): ";
   my $answer = <STDIN>;
-  chomp($answer // '');
+  $answer //= '';
+  chomp $answer;
 
   bail("Credential rotation aborted by operator.") unless $answer eq 'YES';
 

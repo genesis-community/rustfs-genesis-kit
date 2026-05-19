@@ -9,7 +9,7 @@ BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/
 use parent qw(Genesis::Hook);
 
 use Genesis qw/bail/;
-use Genesis::UI qw/prompt_for_boolean prompt_for_integer prompt_for_string prompt_for_list/;
+use Genesis::UI qw/prompt_for_line prompt_for_list/;
 
 # init - Initialize the hook {{{
 sub init {
@@ -24,31 +24,34 @@ sub init {
 sub perform {
 	my ($self) = @_;
 
-	my $instances = prompt_for_integer(
+	my $instances = prompt_for_line(
 		'How many RustFS nodes? (1 = single-node, 3+ = cluster)',
-		default => 1,
-		min     => 1,
+		'instances', '1',
+		qr/^[1-9]\d*$/, 'must be a positive integer'
 	);
 
-	my $rustfs_network = prompt_for_string(
+	my $rustfs_network = prompt_for_line(
 		'Network name for RustFS instances:',
-		default => 'rustfs',
+		'network', 'rustfs',
 	);
 
-	my $rustfs_vm_type = prompt_for_string(
+	my $rustfs_vm_type = prompt_for_line(
 		'VM type for RustFS instances:',
-		default => 'default',
+		'vm_type', 'default',
 	);
 
-	my $rustfs_disk_type = prompt_for_string(
+	my $rustfs_disk_type = prompt_for_line(
 		'Persistent disk type for RustFS instances:',
-		default => 'default',
+		'disk_type', 'default',
 	);
 
 	my @azs = prompt_for_list(
-		'Availability zones (space-separated):',
-		default => [qw/z1 z2 z3/],
+		'line',
+		'Availability zones',
+		'az',
+		1, undef,
 	);
+	@azs = qw/z1 z2 z3/ unless @azs;
 
 	my $file_content = "---\n";
 	$file_content .= "kit:\n";
@@ -58,25 +61,26 @@ sub perform {
 	$file_content .= $self->env->genesis_config_block;
 	$file_content .= "\n";
 	$file_content .= "params:\n";
-	$file_content .= "  instances:            $instances\n";
-	$file_content .= "  rustfs_network:       $rustfs_network\n";
-	$file_content .= "  rustfs_vm_type:       $rustfs_vm_type\n";
-	$file_content .= "  rustfs_disk_type:     $rustfs_disk_type\n";
+	$file_content .= "  instances:        $instances\n";
+	$file_content .= "  rustfs_network:   $rustfs_network\n";
+	$file_content .= "  rustfs_vm_type:   $rustfs_vm_type\n";
+	$file_content .= "  rustfs_disk_type: $rustfs_disk_type\n";
 	$file_content .= "  availability_zones:\n";
 	$file_content .= "  - $_\n" for @azs;
 
 	# route-registrar-specific prompts
 	if ($self->want_feature('route-registrar')) {
-		my $system_domain = prompt_for_string(
+		my $system_domain = prompt_for_line(
 			'CF system domain (e.g. system.example.com):',
+			'system_domain',
 		);
-		my $api_route_prefix = prompt_for_string(
+		my $api_route_prefix = prompt_for_line(
 			'Route prefix for S3 API endpoint:',
-			default => 's3-api',
+			'api_route_prefix', 's3-api',
 		);
-		my $console_route_prefix = prompt_for_string(
+		my $console_route_prefix = prompt_for_line(
 			'Route prefix for S3 console endpoint:',
-			default => 's3-console',
+			'console_route_prefix', 's3-console',
 		);
 		$file_content .= "  system_domain:        $system_domain\n";
 		$file_content .= "  api_route_prefix:     $api_route_prefix\n";
