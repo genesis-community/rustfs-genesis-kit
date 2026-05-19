@@ -1,0 +1,14 @@
+---
+# Conservative (serial) upgrade overlay.
+#
+# Deploys one instance at a time with a canary first. This is the
+# default behavior in rustfs.yml; add this feature explicitly to
+# lock the upgrade strategy so later overlays cannot override it.
+#
+# Recommended for all cluster deployments — rolling upgrades avoid
+# a full cluster outage when instances > 1.
+
+update:
+  serial:        true
+  max_in_flight: 1
+  canaries:      1

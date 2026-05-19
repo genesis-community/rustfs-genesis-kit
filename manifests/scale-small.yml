@@ -1,0 +1,14 @@
+---
+# Small scale overlay — low-traffic or development deployments.
+# Persistent disk: cloud-config 'small' type (typically ~5 GiB).
+# Override rustfs_vm_type / rustfs_disk_type in params to use
+# custom cloud-config names instead.
+
+params:
+  rustfs_vm_type:   small
+  rustfs_disk_type: small
+
+instance_groups:
+- name: rustfs
+  vm_type:              small
+  persistent_disk_type: small

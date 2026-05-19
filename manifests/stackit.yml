@@ -1,0 +1,6 @@
+---
+# STACKIT-specific configurations for RustFS
+
+instance_groups:
+- name: rustfs
+  vm_extensions: []

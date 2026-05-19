@@ -1,0 +1,14 @@
+---
+# Large scale overlay — high-throughput or large-dataset deployments.
+# Persistent disk: cloud-config 'large' type (typically 500 GiB or more).
+# Override rustfs_vm_type / rustfs_disk_type in params to use
+# custom cloud-config names instead.
+
+params:
+  rustfs_vm_type:   large
+  rustfs_disk_type: large
+
+instance_groups:
+- name: rustfs
+  vm_type:              large
+  persistent_disk_type: large

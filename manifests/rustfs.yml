@@ -1,0 +1,75 @@
+meta:
+  default:
+    azs: [z1, z2, z3]
+  domain: (( grab params.rustfs_domain || "rustfs.bosh" ))
+
+exodus:
+  ips:            (( grab instance_groups.rustfs.networks[0].static_ips ))
+  domain:         (( grab meta.domain ))
+  s3_api_url:     (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9000" ))
+  s3_console_url: (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9001" ))
+  ca:             (( vault meta.vault "/certs/ca:certificate" ))
+  access_key:     (( vault meta.vault "/credentials/access_key" ))
+
+instance_groups:
+- name: rustfs
+  jobs:
+  - name: rustfs-server
+    release: rustfs
+    provides:
+      rustfs-peer:
+        as: rustfs-peer
+    consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    properties:
+      rustfs:
+        access_key:           (( vault meta.vault "/credentials/access_key" ))
+        secret_key:           (( vault meta.vault "/credentials/secret_key" ))
+        region:               (( grab params.rustfs_region           || "us-east-1" ))
+        log_level:            (( grab params.log_level               || "info" ))
+        port:                 (( grab params.rustfs_port             || 9000 ))
+        console_port:         (( grab params.rustfs_console_port     || 9001 ))
+        console_enable:       (( grab params.rustfs_console_enable   || true ))
+        volumes_per_node:     (( grab params.rustfs_volumes_per_node || 4 ))
+        server_domains:       (( grab params.rustfs_server_domains   || "" ))
+        persistent_disk_path: (( grab params.rustfs_disk_path        || "/var/vcap/store/rustfs" ))
+        health_enable: true
+        internode:
+          connect_timeout_secs: 3
+          tcp_keepalive_secs:   10
+          rpc_timeout_secs:     10
+        tls:
+          certificate: (( vault meta.vault "/certs/api:certificate" ))
+          key:         (( vault meta.vault "/certs/api:key" ))
+        peer:
+          tls:
+            ca:          (( vault meta.vault "/certs/ca:certificate" ))
+            certificate: (( vault meta.vault "/certs/peer:certificate" ))
+            key:         (( vault meta.vault "/certs/peer:key" ))
+
+  - name: bpm
+    release: bpm
+
+  instances: (( grab params.instances || 1 ))
+  azs:       (( grab params.availability_zones || meta.default.azs ))
+
+  persistent_disk_type: (( grab params.rustfs_disk_type || "default" ))
+  vm_type:              (( grab params.rustfs_vm_type   || "default" ))
+
+  stemcell: default
+  networks:
+  - name:       (( grab params.rustfs_network || "rustfs" ))
+    static_ips: (( static_ips 0 ))
+
+update:
+  serial:            true
+  canaries:          1
+  canary_watch_time: 30000-600000
+  max_in_flight:     1
+  update_watch_time: 30000-600000
+
+stemcells:
+  - alias:   default
+    os:      (( grab params.stemcell_os      || "ubuntu-noble" ))
+    version: (( grab params.stemcell_version || "latest"        ))

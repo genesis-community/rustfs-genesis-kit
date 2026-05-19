@@ -1,0 +1,14 @@
+---
+# Medium scale overlay — general-purpose production deployments.
+# Persistent disk: cloud-config 'medium' type (typically ~50 GiB).
+# Override rustfs_vm_type / rustfs_disk_type in params to use
+# custom cloud-config names instead.
+
+params:
+  rustfs_vm_type:   medium
+  rustfs_disk_type: medium
+
+instance_groups:
+- name: rustfs
+  vm_type:              medium
+  persistent_disk_type: medium

@@ -1,0 +1,16 @@
+---
+# Aggressive (all-at-once) upgrade overlay.
+#
+# Updates all instances simultaneously with no canary phase.
+# Minimizes total upgrade time but causes a full cluster outage
+# for the duration of the update.
+#
+# NOT recommended for cluster deployments (instances > 1) — all
+# nodes restart at the same time, making stored data temporarily
+# unavailable to S3 clients. Use only for single-node deployments
+# or in non-production environments where downtime is acceptable.
+
+update:
+  serial:        false
+  max_in_flight: "100%"
+  canaries:      0

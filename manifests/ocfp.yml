@@ -1,0 +1,10 @@
+---
+meta:
+  ocfp:
+    env:
+      cloud: (( concat genesis.env "." genesis.type "." ))
+
+params:
+  rustfs_network:   (( concat meta.ocfp.env.cloud "net-rustfs" ))
+  rustfs_vm_type:   (( concat meta.ocfp.env.cloud "vm-rustfs" ))
+  rustfs_disk_type: (( concat meta.ocfp.env.cloud "disk-rustfs" ))

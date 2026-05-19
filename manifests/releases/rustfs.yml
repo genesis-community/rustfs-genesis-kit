@@ -1,0 +1,5 @@
+releases:
+- name:    rustfs
+  version: 0.1.0
+  url:     https://github.com/cloudfoundry-community/rustfs-boshrelease/releases/download/v0.1.0/rustfs-0.1.0.tgz
+  sha1:    sha256:PLACEHOLDER_UPDATE_AFTER_RELEASE_BUILD

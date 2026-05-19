@@ -1,0 +1,9 @@
+---
+meta:
+  default:
+    azs: [(( replace )), z1]
+
+instance_groups:
+  - name: rustfs
+    vm_extensions:
+      - (( grab params.azure_availability_set || "rustfs_as" ))

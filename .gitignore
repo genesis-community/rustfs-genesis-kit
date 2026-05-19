@@ -1,0 +1,6 @@
+*.tar.gz
+*.tgz
+dev_releases/
+.genesis/
+*.swp
+.DS_Store
