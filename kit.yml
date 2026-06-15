@@ -17,11 +17,21 @@ supports:
 - azure
 - gcp
 - openstack
+- pve
 - vsphere
 - stackit
 
 required_configs:
   blueprint: []
+
+credentials:
+  base:
+    # S3 access/secret keys. Alphanumeric only to stay safe in URLs, headers,
+    # and shell. Generated on `genesis add-secrets`; rotate with the
+    # reset-credentials (r) addon.
+    credentials:
+      access_key: random 20 allowed-chars a-zA-Z0-9
+      secret_key: random 40 allowed-chars a-zA-Z0-9
 
 certificates:
   base:
