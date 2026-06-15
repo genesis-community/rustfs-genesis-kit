@@ -3,11 +3,11 @@
 # deploying:
 #
 #   cd src/releases/rustfs
-#   bosh create-release --force --name rustfs --version 0.1.4 --tarball=/tmp/rustfs-0.1.4.tgz
-#   genesis <env> bosh upload-release /tmp/rustfs-0.1.4.tgz
+#   bosh create-release --force --name rustfs --version 0.1.6 --tarball=/tmp/rustfs-0.1.6.tgz
+#   genesis <env> bosh upload-release /tmp/rustfs-0.1.6.tgz
 #
 # Once a public release is published, add `url:` and `sha1:` here so Genesis can
 # upload it automatically.
 releases:
 - name:    rustfs
-  version: 0.1.4
+  version: 0.1.6
