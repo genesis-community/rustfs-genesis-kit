@@ -35,8 +35,8 @@ sub perform {
   my $env_name   = $env->name;
   my $vault_path = $env->vault_path_prefix;
 
-  my $access_key_path = "$vault_path/credentials/access_key";
-  my $secret_key_path = "$vault_path/credentials/secret_key";
+  my $access_key_path = "$vault_path/credentials:access_key";
+  my $secret_key_path = "$vault_path/credentials:secret_key";
 
   info("");
   info("#Y{WARNING}: This will rotate RustFS credentials and trigger a redeploy.");

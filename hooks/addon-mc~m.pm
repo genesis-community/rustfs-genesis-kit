@@ -53,10 +53,10 @@ sub perform {
   my ($secret_key, $sk_rc) = run(
     { stderr => 0 },
     'safe', '-T', $env_name,
-    'get', "$vault_path/credentials/secret_key"
+    'get', "$vault_path/credentials:secret_key"
   );
   bail(
-    "Could not read secret_key from Vault path %s/credentials/secret_key.\n".
+    "Could not read secret_key from Vault path %s/credentials:secret_key.\n".
     "Ensure you are authenticated: safe -T %s auth",
     $vault_path, $env_name
   ) unless $sk_rc == 0 && $secret_key;

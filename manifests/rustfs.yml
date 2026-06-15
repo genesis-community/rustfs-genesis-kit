@@ -9,7 +9,7 @@ exodus:
   s3_api_url:     (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9000" ))
   s3_console_url: (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9001" ))
   ca:             (( vault meta.vault "/certs/ca:certificate" ))
-  access_key:     (( vault meta.vault "/credentials/access_key" ))
+  access_key:     (( vault meta.vault "/credentials:access_key" ))
 
 instance_groups:
 - name: rustfs
@@ -24,16 +24,16 @@ instance_groups:
         from: rustfs-peer
     properties:
       rustfs:
-        access_key:           (( vault meta.vault "/credentials/access_key" ))
-        secret_key:           (( vault meta.vault "/credentials/secret_key" ))
+        access_key:           (( vault meta.vault "/credentials:access_key" ))
+        secret_key:           (( vault meta.vault "/credentials:secret_key" ))
         region:               (( grab params.rustfs_region           || "us-east-1" ))
         log_level:            (( grab params.log_level               || "info" ))
         port:                 (( grab params.rustfs_port             || 9000 ))
         console_port:         (( grab params.rustfs_console_port     || 9001 ))
         console_enable:       (( grab params.rustfs_console_enable   || true ))
-        volumes_per_node:     (( grab params.rustfs_volumes_per_node || 4 ))
+        volumes_per_node:     (( grab params.rustfs_volumes_per_node || 1 ))
         server_domains:       (( grab params.rustfs_server_domains   || "" ))
-        persistent_disk_path: (( grab params.rustfs_disk_path        || "/var/vcap/store/rustfs" ))
+        persistent_disk_path: (( grab params.rustfs_disk_path        || "/var/vcap/store/rustfs-server" ))
         health_enable: true
         internode:
           connect_timeout_secs: 3
@@ -53,6 +53,9 @@ instance_groups:
 
   instances: (( grab params.instances || 1 ))
   azs:       (( grab params.availability_zones || meta.default.azs ))
+
+  env:
+    persistent_disk_fs: xfs
 
   persistent_disk_type: (( grab params.rustfs_disk_type || "default" ))
   vm_type:              (( grab params.rustfs_vm_type   || "default" ))
