@@ -68,13 +68,39 @@ sub perform {
 		my @valid_azs = grep { defined $_ } @azs;
 		bail("No valid availability zones found for RustFS instances") unless @valid_azs;
 
+		# Deduped AZ names for the top-level azs: block (below).
+		my %seen_az;
+		my @uniq_azs = grep { !$seen_az{$_}++ } @valid_azs;
+
+		# Each AZ carries the environment's CPI so the deploy-time stemcell
+		# check matches the right (named) CPI's stemcells; fall back to a bare
+		# name when the env has no distinct CPI.
+		my $cpi_name = $self->env->cpi_name;
+		my $az_block = join '', map {
+			"\n- name: $_" . (defined $cpi_name ? "\n  cpi: $cpi_name" : '')
+		} @uniq_azs;
+
+		# Top-level azs: lets the deploy-time AZ check resolve the instance
+		# group's AZs (genesis reads the unmerged manifest, which otherwise has
+		# no azs); genesis prunes this block before bosh deploy.
+		#
+		# azs (instance group): the base manifest value is a (( grab )) scalar
+		# operator, so a literal array overwrites it cleanly — no replace
+		# directive (a leading (( replace )) would survive as a literal AZ,
+		# since there is no base array to replace).
+		#
+		# networks: the base manifest value is a literal array, so a leading
+		# (( replace )) correctly discards it and pins the ocfp network + static
+		# IPs (mirrors the shield ocfp manifest).
 		$dynamic_static_fragment = <<"EOF";
 exodus:
   ips: ${\(join ',', @ips)}
 
+azs:$az_block
+
 instance_groups:
 - name: rustfs
-  azs:${\(join "\n  - ", '','(( replace ))', @valid_azs)}
+  azs:${\(join "\n  - ", '', @valid_azs)}
   instances: $instances
   networks:
   - (( replace ))
