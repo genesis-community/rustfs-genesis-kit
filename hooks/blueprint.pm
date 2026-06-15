@@ -41,10 +41,16 @@ sub perform {
 		my $az_map   = $self->env->director_exodus_lookup('/network')->{azs};
 
 		my (@ips, @azs) = ();
+		# Dedicated static IP for the smoke-tests errand, taken from instance 0's
+		# subnet. The "rustfs_ip" substring makes the cloud-config reserved-ips
+		# regex fold it into net-rustfs's static range alongside rustfs_ip, so the
+		# errand gets a conflict-free static address without a dynamic pool.
+		my $smoke_ip;
 		for my $subnet (sort grep {/^$prefix/} keys %$subnets) {
 			my $ip = $subnets->{$subnet}{'reserved-ips'}{'rustfs_ip'};
 			next unless $ip;
 			push @ips, $ip;
+			$smoke_ip //= $subnets->{$subnet}{'reserved-ips'}{'rustfs_ip_smoke'};
 
 			my $az = $subnets->{$subnet}{az};
 			if (!$az) {
@@ -107,6 +113,23 @@ instance_groups:
   - name: $network_name
     static_ips:${\(join "\n    - ", '', @ips)}
 EOF
+
+		# Pin the errand to its dedicated static IP on net-rustfs when one is
+		# reserved; otherwise the errand falls back to the manifest default
+		# (a dynamic address, if the network has spare capacity).
+		if ($smoke_ip) {
+			# Replace the errand's grab-derived network (the base entry's name is
+			# an unresolved (( grab )) at merge time, so spruce would otherwise
+			# append rather than merge) and pin it to net-rustfs + the smoke IP.
+			$dynamic_static_fragment .= <<"EOF";
+- name: smoke-tests
+  networks:
+  - (( replace ))
+  - name: $network_name
+    static_ips:
+    - $smoke_ip
+EOF
+		}
 
 	} elsif (my $instances = scalar(@$ips)) {
 		$dynamic_static_fragment = <<"EOF";

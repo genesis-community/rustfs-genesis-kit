@@ -65,6 +65,34 @@ instance_groups:
   - name:       (( grab params.rustfs_network || "rustfs" ))
     static_ips: (( static_ips 0 ))
 
+- name: smoke-tests
+  lifecycle: errand
+  instances: 1
+  # Follow the rustfs instance group's resolved AZs and network so the errand
+  # lands on the same (ocfp or default) network without duplicating the
+  # blueprint's AZ/network logic.
+  azs: (( grab instance_groups.rustfs.azs ))
+  vm_type:  (( grab params.errand_vm_type || params.rustfs_vm_type || "default" ))
+  stemcell: default
+  networks:
+  - name: (( grab instance_groups.rustfs.networks[0].name ))
+  jobs:
+  - name: smoke-tests
+    release: rustfs
+    consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    properties:
+      rustfs:
+        access_key: (( vault meta.vault "/credentials:access_key" ))
+        secret_key: (( vault meta.vault "/credentials:secret_key" ))
+        region:     (( grab params.rustfs_region || "us-east-1" ))
+        port:       (( grab params.rustfs_port   || 9000 ))
+        tls:
+          certificate: (( vault meta.vault "/certs/api:certificate" ))
+      smoke_tests:
+        timeout_secs: (( grab params.smoke_timeout_secs || 30 ))
+
 update:
   serial:            true
   canaries:          1
