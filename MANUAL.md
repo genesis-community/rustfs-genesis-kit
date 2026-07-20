@@ -173,7 +173,7 @@ workloads. Requires a matching VM type in cloud config.
 ### smoke (s)
 
 ```bash
-genesis do my-rustfs -- smoke
+genesis my-rustfs do smoke
 ```
 
 Runs the `smoke-tests` BOSH errand. The errand exercises:
@@ -190,7 +190,7 @@ VM if it fails.
 ### reset-credentials (r)
 
 ```bash
-genesis do my-rustfs -- reset-credentials
+genesis my-rustfs do reset-credentials
 ```
 
 Rotates the admin `access_key` and `secret_key` in vault. The new credentials
@@ -204,7 +204,7 @@ keys are 32 characters.
 ### mc (m)
 
 ```bash
-genesis do my-rustfs -- mc
+genesis my-rustfs do mc
 ```
 
 Configures and launches the MinIO Client (`mc`) pointed at this RustFS

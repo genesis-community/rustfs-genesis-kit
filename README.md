@@ -114,7 +114,7 @@ notes, credential management, and certificate lifecycle details.
 
 ## Addons
 
-Run addons with `genesis do my-rustfs -- <addon>`:
+Run addons with `genesis my-rustfs do <addon>`:
 
 | Addon | Shortcut | Description |
 |-------|----------|-------------|
