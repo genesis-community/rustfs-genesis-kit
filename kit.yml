@@ -29,11 +29,12 @@ required_configs:
 credentials:
   base:
     # S3 access/secret keys. Alphanumeric only to stay safe in URLs, headers,
-    # and shell. Generated on `genesis add-secrets`; rotate with the
-    # reset-credentials (r) addon.
+    # and shell. Generated on `genesis add-secrets`.  They are fixed, so that
+    # `genesis rotate-secrets` leaves them alone; every client holds them.
+    # Rotate them on purpose with the reset-credentials (r) addon.
     credentials:
-      access_key: random 20 allowed-chars a-zA-Z0-9
-      secret_key: random 40 allowed-chars a-zA-Z0-9
+      access_key: random 20 allowed-chars a-zA-Z0-9 fixed
+      secret_key: random 40 allowed-chars a-zA-Z0-9 fixed
 
 certificates:
   base:
