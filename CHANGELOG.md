@@ -18,11 +18,25 @@
 
 - The manifest sets `features.use_dns_addresses: false`, so BOSH links hand peers the IP addresses that the API certificate names.
 
-- A Go spec suite under `spec/` covers the base, single address, cluster with `params.ips`, ocfp, resolute, resolute with ocfp and cluster, and resolute with route-registrar environments, plus both resolute refusals and the four cluster address refusals. `spec/api_cert_test.go` generates the API certificate against a vault of its own, checks that it names every static IP, and checks that `check-secrets` and `rotate-secrets certs/api` bring it up to date after `params.ips` grows. `spec/hooks/pre-deploy.t` covers the merged-manifest check, and `spec/hooks/post-deploy.t` covers the health probe.
+- The pre-deploy hook refuses a deploy that changes the node count of a running deployment, because RustFS records its erasure layout on the drives and nodes refuse to start over a different one. It reads the deployed count from BOSH, or from the exodus `instances` value when BOSH cannot answer. `params.allow_node_count_change: true` lets a cluster change size, but nothing lets a single node grow into a cluster, because RustFS formats a lone drive as single-node single-drive and logs `unsupported pool expansion` when asked to expand it. The refusal lists the steps to move the data to a new deployment.
+
+- The pre-deploy hook reads the public API certificate from vault and refuses the deploy when it does not name `127.0.0.1` and every address in `meta.api_cert_ips`. The message says to run `genesis <env> rotate-secrets certs/api`. The hook never reads the private key.
+
+- The pre-deploy hook refuses bpm 1.4.31, `latest`, or a bpm release without a version on noble, because bpm 1.4.31 starts no process on a cgroup v2 stemcell.
+
+- The blueprint refuses exactly two nodes, whether they come from `params.ips`, `params.instances`, or `params.ocfp_instances`. The `new` hook refuses two as well.
+
+- Under `ocfp`, the blueprint refuses `params.ips` and `params.instances`, which the ocfp fragment would otherwise replace without a word, and points at `params.ocfp_instances`. Outside ocfp it refuses `params.instances` when `params.ips` is set and the two disagree.
+
+- Under `ocfp`, the exodus data carries `cluster` and `cluster_size` whether or not the `cluster` feature is on.
+
+- The smoke-tests errand receives the kit CA as `rustfs.tls.ca`, so it verifies every node's certificate.
+
+- A Go spec suite under `spec/` covers the base, single address, cluster with `params.ips`, ocfp, resolute, resolute with ocfp and cluster, and resolute with route-registrar environments, plus ocfp with the cluster feature, both resolute refusals, the four cluster address refusals, the two-node refusals, the ocfp parameter refusals, and the `params.ips` and `params.instances` mismatch. `spec/route_registrar_test.go` checks that every route registers `tls_port` and `server_cert_domain_san`. `spec/api_cert_test.go` generates the API certificate against a vault of its own, checks that it names every static IP, and checks that `check-secrets` and `rotate-secrets certs/api` bring it up to date after `params.ips` grows. `spec/hooks/pre-deploy.t` covers the merged-manifest checks, the API certificate check, and the node count check, and `spec/hooks/post-deploy.t` covers the health probe.
 
 ### Changed
 
-- The kit pins the rustfs release to 0.2.0+dev.1, which carries RustFS 1.0.3. The final release's url and sha1 replace this dev pin once it is published.
+- The kit pins the rustfs release to 0.2.0+dev.2, which carries RustFS 1.0.3 with a readiness wait in post-start, a bounded drain, and CA verification in the smoke-tests errand. The final release's url and sha1 replace this dev pin once it is published.
 
 - `manifests/releases/bpm.yml` pins bpm 1.4.22 with its bosh.io url and sha1 instead of `latest`, because bpm 1.4.31 cannot start any process on a noble stemcell.
 
@@ -36,9 +50,19 @@
 
 - The instance count default lives in `meta.default.instances`, because graft fails `static_ips` when `instances` falls through to a literal default. Before this change, every environment failed to merge under graft. The cluster's exodus `cluster_size` now reads the instance group's count.
 
+- The route-registrar routes register `tls_port` on the configured API and console ports, with `server_cert_domain_san` set to `rustfs_domain`, instead of a plain `port`. gorouter must trust the kit CA through the CF `router.ca_certs` property. The unused `route_registrar.host` property is gone.
+
+- The `cluster` feature no longer adds the `bosh-dns-aliases` release, which nothing in a cluster used. The `route-registrar` feature still adds it.
+
+- The access and secret keys are marked `fixed`, so `genesis rotate-secrets` leaves them alone. The `reset-credentials` addon still rotates them.
+
+- The exodus URLs take their host from `meta.url_host`, which brackets an IPv6 address, and their ports from `rustfs_port` and `rustfs_console_port`.
+
+- The `new` hook writes `params.ocfp_instances` under ocfp, and outside ocfp it asks for each node's static IP address and writes `params.ips`.
+
 - The kit requires the cloud config for the blueprint, manifest, and check hooks, since the manifest takes static IPs from the cloud config network.
 
-- The post-deploy hook probes `/health/ready` on every RustFS instance over https at `127.0.0.1`, and it verifies the certificate against the kit CA on the node. It used to request `/health` over plain http, which a node that serves https only refuses, and `/health` answers even when a cluster has no quorum. When the CA cannot be read or does not verify the certificate, the hook probes again without verification and says so. Every probe result is a warning, never a failure.
+- The post-deploy hook probes `/health/ready` on every RustFS instance over https at the node's own IP address, bracketed for IPv6, and it verifies the certificate against the kit CA on the node with that address as the name. When the kit knows no address list, as for a single node without `params.ips`, it dials `127.0.0.1` and says so. It used to request `/health` over plain http, which a node that serves https only refuses, and `/health` answers even when a cluster has no quorum. When the CA cannot be read or does not verify the certificate, the hook probes again without verification and says so. Every probe result is a warning, never a failure.
 
 - The post-deploy hook reads the instance list from BOSH, and it falls back to the exodus `instances` count, which the manifest now exports. It reads the exodus URLs through `exodus_lookup` and runs `bosh ssh` through the environment's BOSH connection, where it used to call `safe` and a bare `bosh -e` itself. It skips its checks when the deploy return code is missing or not zero.
 
@@ -46,7 +70,13 @@
 
 ### Known limitations
 
-- A change to the static IPs needs `genesis rotate-secrets certs/api` before the deploy, because `genesis deploy` does not renew a certificate whose names no longer match. `check-secrets` reports each missing address.
+- A change to the static IPs needs `genesis rotate-secrets certs/api` before the deploy, because `genesis deploy` does not renew a certificate whose names no longer match. `check-secrets` reports each missing address, and the pre-deploy hook refuses the deploy until the certificate names them.
+
+- The node count is fixed for the life of a deployment. Changing it means copying the data out, deploying fresh, and copying it back.
+
+- `genesis rotate-secrets --regen-x509-keys` replaces the CA, and the nodes stop trusting each other until the rolling deploy reaches all of them.
+
+- A single node without `params.ips` takes its address from the cloud config, so its exodus URLs do not bracket an IPv6 address, and its certificate names only `rustfs_domain` and `127.0.0.1`.
 
 ## 0.0.1 (2026-05-20) — initial pre-release scaffold
 
