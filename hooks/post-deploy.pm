@@ -8,7 +8,11 @@ BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/
 
 use parent qw(Genesis::Hook::PostDeploy);
 
-use Genesis qw/info run/;
+use Genesis qw/info/;
+use JSON::PP ();
+
+# The CA certificate that the rustfs-server job renders from rustfs.tls.ca.
+use constant CA_FILE => '/var/vcap/jobs/rustfs-server/tls/ca.crt';
 
 # init - Initialize the hook {{{
 sub init {
@@ -23,7 +27,11 @@ sub init {
 sub perform {
   my ($self) = @_;
 
-  unless ($ENV{GENESIS_DEPLOY_RC} == 0) {
+  # A missing return code is not a success.  Genesis passes it to the hook
+  # and also exports it, so read either one, and treat anything other than
+  # a plain 0 as a failed deploy.
+  my $rc = defined($self->{rc}) ? $self->{rc} : $ENV{GENESIS_DEPLOY_RC};
+  unless (defined($rc) && $rc =~ /^\s*0\s*$/) {
     info("#R{Deployment failed} - skipping post-deploy actions");
     return $self->done(1);
   }
@@ -32,27 +40,37 @@ sub perform {
   info("#M{$ENV{GENESIS_ENVIRONMENT}} RustFS deployed successfully!");
   info("");
 
-  my $env  = $self->env;
+  my $env = $self->env;
 
-  # Read exodus values written by spruce during the deploy
-  my $s3_api_url     = $self->_exodus_value('s3_api_url')     // '(unknown)';
-  my $s3_console_url = $self->_exodus_value('s3_console_url') // '(unknown)';
-  my $instances      = $self->_exodus_value('instances')      // 1;
+  # Read the exodus data this deploy just exported.  exodus_lookup returns
+  # a value and key pair in list context, so each call is made scalar.
+  my $s3_api_url     = scalar($env->exodus_lookup('s3_api_url', undef))     // '(unknown)';
+  my $s3_console_url = scalar($env->exodus_lookup('s3_console_url', undef)) // '(unknown)';
+
+  # The probe targets come from BOSH.  Without it, fall back to the exodus
+  # instance count and probe rustfs/0 through rustfs/N-1.
+  my @targets = $self->_rustfs_instances;
+  my $from_bosh = scalar(@targets);
+  unless (@targets) {
+    my $count = scalar($env->exodus_lookup('instances', undef));
+    $count = 1 unless defined($count) && !ref($count) && $count =~ /^[1-9][0-9]*$/;
+    @targets = map {"rustfs/$_"} (0 .. $count - 1);
+  }
 
   info("  S3 API URL:     #G{%s}", $s3_api_url);
   info("  Console URL:    #G{%s}", $s3_console_url);
-  info("  Instances:      #C{%d}", $instances);
+  info("  Instances:      #C{%d}", scalar(@targets));
   info("");
 
-  # Health probe against rustfs/0
-  $self->_probe_node(0, $s3_api_url);
-
-  # Cluster mode: probe every peer beyond index 0
-  if ($instances > 1) {
-    for my $idx (1 .. $instances - 1) {
-      $self->_probe_node($idx, $s3_api_url);
-    }
-  }
+  # Every node serves https only, so the probe dials https on the loopback
+  # address, which the API certificate names, and verifies the certificate
+  # against the kit CA on the node.  Failures are warnings, because the
+  # cluster may still be converging.
+  info("  #Y{[note]} BOSH did not list the instances, so the probes assume rustfs/0 to rustfs/%d", scalar(@targets) - 1)
+    unless $from_bosh;
+  my $port = scalar($env->lookup('params.rustfs_port', 9000));
+  $port = 9000 unless defined($port) && !ref($port) && $port =~ /^[0-9]+$/ && $port > 0 && $port < 65536;
+  $self->_probe_node($_, $port) for @targets;
 
   info("");
   info(
@@ -64,49 +82,123 @@ sub perform {
 }
 # }}}
 
-# _exodus_value - Read a single key from genesis exodus data {{{
-sub _exodus_value {
-  my ($self, $key) = @_;
-  my $env = $self->env;
+# _rustfs_instances - every rustfs instance, from BOSH {{{
+# Returns an empty list when BOSH cannot be asked, so the caller can fall
+# back to the exodus data.  Errand VMs are skipped.
+sub _rustfs_instances {
+  my ($self) = @_;
+  my ($out, $rc) = eval {
+    $self->env->bosh->execute(
+      { stderr => 0, deployment => $self->env->deployment_name },
+      'instances', '--json',
+    );
+  };
+  return () if $@ || !defined($rc) || $rc != 0 || !defined($out);
 
-  my ($out, $rc) = run(
-    { stderr => 0 },
-    'safe', '-T', $ENV{GENESIS_ENVIRONMENT},
-    'get', "$ENV{GENESIS_EXODUS_MOUNT}:$key"
-  );
-  return undef unless $rc == 0 && defined $out;
-  chomp $out;
-  return $out;
+  my $json = eval { JSON::PP->new->decode($out) };
+  return () unless ref($json) eq 'HASH' && ref($json->{Tables}) eq 'ARRAY';
+
+  my @targets;
+  for my $row (map {@{$_->{Rows} // []}} grep {ref($_) eq 'HASH'} @{$json->{Tables}}) {
+    next unless ref($row) eq 'HASH';
+    my $instance = $row->{instance} // '';
+    next unless $instance =~ m{^rustfs/};
+    $instance =~ s/\s*\(.*\)\s*$//;  # drop a "(bootstrap)" style suffix
+    push @targets, $instance;
+  }
+  return @targets;
 }
 # }}}
 
-# _probe_node - Curl the health endpoint on a specific rustfs instance {{{
-sub _probe_node {
-  my ($self, $idx, $s3_api_url) = @_;
+# _probe_command - the shell command that probes one node {{{
+# It prints exactly one RUSTFS_PROBE= marker line:
+#
+#   verified         /health/ready answered, and the certificate verified
+#                    against the kit CA on the node
+#   unverified:cert  /health/ready answered, but the certificate did not
+#                    verify against the kit CA
+#   unverified:noca  /health/ready answered, but the kit CA could not be
+#                    read on the node, so nothing was verified
+#   failed:N         curl exited N
+#
+# The remote command always exits 0 after it prints the marker, so a
+# non-zero exit from bosh ssh means the probe never ran.  The marker is
+# assembled at run time, so the command text itself never matches it.  The
+# job's files are readable by root only, so the verified probe runs curl
+# under sudo.
+sub _probe_command {
+  my ($class, $port) = @_;
+  my $url = "https://127.0.0.1:$port/health/ready";
+  my $ca  = CA_FILE;
+  return join('; ',
+    'p=RUSTFS',
+    "url=$url",
+    "ca=$ca",
+    'if sudo -n grep -q "BEGIN CERTIFICATE" "$ca" 2>/dev/null; then ' .
+      'sudo -n curl -fsS --max-time 5 -o /dev/null --cacert "$ca" "$url"; rc=$?; why=cert; ' .
+    'else rc=60; why=noca; fi',
+    # 77 means curl could not read the CA file.
+    'if [ "$rc" -eq 77 ]; then rc=60; why=noca; fi',
+    'if [ "$rc" -eq 0 ]; then echo "${p}_PROBE=verified"; exit 0; fi',
+    # 60 is curl's code for a certificate it could not verify.  Anything
+    # else is a real failure that skipping verification would not change.
+    'if [ "$rc" -ne 60 ]; then echo "${p}_PROBE=failed:$rc"; exit 0; fi',
+    'curl -fsSk --max-time 5 -o /dev/null "$url"; rc=$?',
+    'if [ "$rc" -eq 0 ]; then echo "${p}_PROBE=unverified:$why"; else echo "${p}_PROBE=failed:$rc"; fi',
+    'exit 0',
+  );
+}
+# }}}
 
-  my $deployment = $self->env->deployment_name;
-  my $target     = "rustfs/$idx";
+# _probe_node - probe the health endpoint of one rustfs instance {{{
+sub _probe_node {
+  my ($self, $target, $port) = @_;
 
   info("  Probing health of #C{$target}...");
 
-  # bosh ssh + curl /health; non-zero means unhealthy but we don't fail the deploy
-  my ($out, $rc) = run(
-    { stderr => 0 },
-    'bosh', '-e', $self->env->bosh->alias,
-    '-d', $deployment,
-    'ssh', $target,
-    '--command', 'curl -sk --max-time 5 http://localhost:9000/health',
-    '--results', '--json'
-  );
-
-  if ($rc == 0) {
-    info("    #g{[ok]} $target health endpoint responded");
-  } else {
+  # Route through $self->env->bosh->execute rather than a bare `bosh -e
+  # <alias>`, because execute() sets BOSH_ENVIRONMENT to the director URL
+  # along with the CA and client credentials.
+  my ($out, $rc) = eval {
+    $self->env->bosh->execute(
+      { stderr => 0, deployment => $self->env->deployment_name },
+      'ssh', $target,
+      '--command', ref($self)->_probe_command($port),
+      '--results',
+    );
+  };
+  if ($@ || !defined($rc) || $rc != 0) {
     info(
-      "    #Y{[warn]} $target health probe failed (exit $rc) - ".
+      "    #Y{[warn]} could not run the health probe on $target (%s)",
+      $@ ? 'bosh ssh failed' : 'exit '.($rc // 'unknown')
+    );
+    return 'error';
+  }
+
+  my ($result) = ($out // '') =~ /RUSTFS_PROBE=(verified|unverified:(?:cert|noca)|failed:\d+)/;
+  if (!defined($result)) {
+    info("    #Y{[warn]} $target health probe printed no result");
+    return 'error';
+  } elsif ($result eq 'verified') {
+    info("    #g{[ok]} $target is ready, and its certificate verified against the kit CA");
+  } elsif ($result eq 'unverified:cert') {
+    info(
+      "    #Y{[warn]} $target is ready, but its certificate did not verify against ".
+      "the kit CA - rotate #C{certs/api} and redeploy"
+    );
+  } elsif ($result eq 'unverified:noca') {
+    info(
+      "    #Y{[warn]} $target is ready, but the kit CA could not be read on the ".
+      "node, so its certificate was not verified"
+    );
+  } else {
+    my ($code) = $result =~ /^failed:(\d+)$/;
+    info(
+      "    #Y{[warn]} $target health probe failed (curl exit $code) - ".
       "cluster may still be converging"
     );
   }
+  return $result;
 }
 # }}}
 
