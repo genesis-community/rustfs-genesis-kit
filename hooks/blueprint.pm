@@ -38,11 +38,16 @@ sub perform {
 	# Every static IP the blueprint assigns, which the API certificate names.
 	my @cert_ips = ();
 
+	# The node count, once the blueprint knows it.
+	my $node_count;
+
 	# Track which optional releases have been added to avoid duplicates
 	my %added_releases;
 
 	my $dynamic_static_fragment = '';
 	if ($self->want_feature('ocfp')) {
+		$self->_refuse_ocfp_overrides;
+
 		# Determine instance count and IPs from ocfp config
 		my $subnets = $self->env->ocfp_config_lookup('net.subnets');
 		my $prefix   = $self->env->ocfp_subnet_prefix;
@@ -69,7 +74,13 @@ sub perform {
 			}
 		}
 
-		my $instances = scalar($self->env->lookup('params.ocfp_instances')) || scalar(@ips);
+		my $requested = scalar($self->env->lookup('params.ocfp_instances', undef));
+		bail(
+			"#c{params.ocfp_instances} must be a whole number of RustFS nodes, not %s.",
+			ref($requested) ? 'a '.lc(ref($requested)) : "'$requested'"
+		) if defined($requested) && (ref($requested) || $requested !~ /^[1-9][0-9]*$/);
+		my $instances = $requested || scalar(@ips);
+		bail("No ocfp subnet reserves a #c{rustfs_ip} address, so there is nowhere to put a RustFS node.") unless $instances;
 		bail(
 			"Only %s instances available under OCFP; environment requested %s",
 			scalar(@ips), $instances
@@ -106,10 +117,17 @@ sub perform {
 		# networks: the base manifest value is a literal array, so a leading
 		# (( replace )) correctly discards it and pins the ocfp network + static
 		# IPs (mirrors the shield ocfp manifest).
-		@cert_ips = @ips;
+		# cluster.yml publishes cluster and cluster_size only when the cluster
+		# feature is on, but under ocfp the reservations decide the node
+		# count, so the fragment publishes both itself.
+		@cert_ips   = @ips;
+		$node_count = $instances;
+		my $is_cluster = $instances > 1 ? 'true' : 'false';
 		$dynamic_static_fragment = <<"EOF";
 exodus:
   ips: ${\(join ',', @ips)}
+  cluster: $is_cluster
+  cluster_size: $instances
 
 azs:$az_block
 
@@ -144,7 +162,16 @@ EOF
 		bail("#c{params.ips} must be a list of IP addresses, one per RustFS instance.");
 
 	} elsif (my $instances = scalar(@$ips)) {
-		@cert_ips = @$ips;
+		my $requested = scalar($self->env->lookup('params.instances', undef));
+		bail(
+			"#c{params.ips} lists %d addresses, but #c{params.instances} asks for %s " .
+			"nodes.  The kit deploys one node per address in #c{params.ips}, so " .
+			"remove #c{params.instances} or make the two agree.",
+			$instances, ref($requested) ? 'a '.lc(ref($requested)).' of' : $requested
+		) if defined($requested) && (ref($requested) || $requested !~ /^\s*\d+\s*$/ || $requested != $instances);
+
+		@cert_ips   = @$ips;
+		$node_count = $instances;
 		$dynamic_static_fragment = <<"EOF";
 exodus:
   ips: ${\(join ',', @$ips)}
@@ -195,6 +222,14 @@ EOF
 		}
 	}
 
+	unless (defined($node_count)) {
+		my $requested = scalar($self->env->lookup(
+			'params.instances', $self->want_feature('cluster') ? 3 : 1
+		));
+		$node_count = $requested
+			if defined($requested) && !ref($requested) && $requested =~ /^\s*\d+\s*$/;
+	}
+	$self->_refuse_two_nodes($node_count);
 	$self->_check_cluster_addresses(scalar(@cert_ips));
 	$dynamic_static_fragment .= $self->_api_cert_ips_fragment(@cert_ips)
 		if @cert_ips;
@@ -242,7 +277,52 @@ sub _api_cert_ips_fragment {
 		API_CERT_IP_SLOTS, scalar(@ips), API_CERT_IP_SLOTS
 	) if @ips > API_CERT_IP_SLOTS;
 
-	return "\nmeta:\n  api_cert_ips:" . join('', map {"\n  - $_"} @ips) . "\n";
+	# meta.url_host is the first node's address as it sits in a URL, so the
+	# exodus URLs bracket an IPv6 address.  Without a known list, rustfs.yml
+	# falls back to the first static IP that BOSH assigns.
+	my $url_host = $ips[0] =~ /:/ ? "[$ips[0]]" : $ips[0];
+
+	return "\nmeta:\n  url_host: \"$url_host\"\n  api_cert_ips:" . join('', map {"\n  - $_"} @ips) . "\n";
+}
+# }}}
+
+# _refuse_ocfp_overrides - refuse node settings that ocfp replaces {{{
+# Under ocfp the rustfs_ip reservations decide the addresses, and
+# params.ocfp_instances decides how many of them to use.  The ocfp fragment
+# replaces params.ips and params.instances, so a value there would be
+# silently ignored.
+sub _refuse_ocfp_overrides {
+	my ($self) = @_;
+	for my $param (qw/ips instances/) {
+		my $value = scalar($self->env->lookup("params.$param", undef));
+		next unless defined($value);
+		bail(
+			"The #c{ocfp} feature takes the RustFS node addresses from the ocfp " .
+			"#c{rustfs_ip} reservations, so it ignores params.%s.  Remove " .
+			"#c{params.%s}, and set #c{params.ocfp_instances} to choose how many " .
+			"of the reserved addresses to use.",
+			$param, $param
+		);
+	}
+	return;
+}
+# }}}
+
+# _refuse_two_nodes - refuse a two-node cluster {{{
+# RustFS splits each object into data and parity shards across every drive.
+# When the two counts are equal, as they are on two nodes, a write needs
+# more than half of the drives.  With two nodes, losing either one stops
+# writes, so a two-node cluster is less available than a single node and
+# doubles the hardware.  Three nodes is the smallest cluster that keeps
+# writing through the loss of one node.
+sub _refuse_two_nodes {
+	my ($self, $count) = @_;
+	return unless defined($count) && $count == 2;
+	bail(
+		"The RustFS kit refuses to deploy exactly two nodes.  A two-node cluster stops " .
+		"writing when either node is down, so it is less available than one " .
+		"node.  Deploy one node, or a cluster of three or more."
+	);
 }
 # }}}
 
