@@ -48,13 +48,16 @@ sub perform {
   my $s3_console_url = scalar($env->exodus_lookup('s3_console_url', undef)) // '(unknown)';
 
   # The probe targets come from BOSH.  Without it, fall back to the exodus
-  # instance count and probe rustfs/0 through rustfs/N-1.
+  # instance count and probe rustfs/0 through rustfs/N-1, taking each
+  # node's address from the exodus ips list.
   my @targets = $self->_rustfs_instances;
   my $from_bosh = scalar(@targets);
   unless (@targets) {
     my $count = scalar($env->exodus_lookup('instances', undef));
     $count = 1 unless defined($count) && !ref($count) && $count =~ /^[1-9][0-9]*$/;
-    @targets = map {"rustfs/$_"} (0 .. $count - 1);
+    my $ips = scalar($env->exodus_lookup('ips', undef));
+    my @ips = defined($ips) && !ref($ips) ? split(/\s*,\s*/, $ips) : ();
+    @targets = map {{name => "rustfs/$_", ip => $ips[$_]}} (0 .. $count - 1);
   }
 
   info("  S3 API URL:     #G{%s}", $s3_api_url);
@@ -62,15 +65,34 @@ sub perform {
   info("  Instances:      #C{%d}", scalar(@targets));
   info("");
 
-  # Every node serves https only, so the probe dials https on the loopback
-  # address, which the API certificate names, and verifies the certificate
-  # against the kit CA on the node.  Failures are warnings, because the
-  # cluster may still be converging.
+  # Every node serves https only.  The probe dials each node at its own IP
+  # address, the name that peers and clients use, and verifies the
+  # certificate against the kit CA with that address as the name.  When the
+  # kit does not know the addresses, as for a single node without
+  # params.ips, the certificate names only 127.0.0.1, so the probe dials
+  # that instead.  Failures are warnings, because the cluster may still be
+  # converging.
   info("  #Y{[note]} BOSH did not list the instances, so the probes assume rustfs/0 to rustfs/%d", scalar(@targets) - 1)
     unless $from_bosh;
   my $port = scalar($env->lookup('params.rustfs_port', 9000));
   $port = 9000 unless defined($port) && !ref($port) && $port =~ /^[0-9]+$/ && $port > 0 && $port < 65536;
-  $self->_probe_node($_, $port) for @targets;
+
+  my $ips_known = $self->want_feature('ocfp') || do {
+    my $ips = scalar($env->lookup('params.ips', undef));
+    ref($ips) eq 'ARRAY' && @$ips;
+  };
+  info(
+    "  #Y{[note]} params.ips is not set, so the API certificate names 127.0.0.1 " .
+    "but not the node's address.  The probe dials 127.0.0.1, and clients that " .
+    "verify the certificate by IP address will refuse it until params.ips lists it."
+  ) unless $ips_known;
+
+  for my $target (@targets) {
+    my $host = $ips_known ? $target->{ip} : undef;
+    info("  #Y{[note]} no address is known for #C{%s}, so its probe dials 127.0.0.1", $target->{name})
+      if $ips_known && !defined($host);
+    $self->_probe_node($target->{name}, $port, $host);
+  }
 
   info("");
   info(
@@ -82,9 +104,10 @@ sub perform {
 }
 # }}}
 
-# _rustfs_instances - every rustfs instance, from BOSH {{{
-# Returns an empty list when BOSH cannot be asked, so the caller can fall
-# back to the exodus data.  Errand VMs are skipped.
+# _rustfs_instances - every rustfs instance and its address, from BOSH {{{
+# Returns a list of {name, ip} hashes, or an empty list when BOSH cannot be
+# asked, so the caller can fall back to the exodus data.  Errand VMs are
+# skipped.  ip is the first address BOSH lists, or undef when it lists none.
 sub _rustfs_instances {
   my ($self) = @_;
   my ($out, $rc) = eval {
@@ -104,7 +127,8 @@ sub _rustfs_instances {
     my $instance = $row->{instance} // '';
     next unless $instance =~ m{^rustfs/};
     $instance =~ s/\s*\(.*\)\s*$//;  # drop a "(bootstrap)" style suffix
-    push @targets, $instance;
+    my ($ip) = grep {$_ ne ''} split(/[\s,]+/, $row->{ips} // '');
+    push @targets, {name => $instance, ip => $ip};
   }
   return @targets;
 }
@@ -126,16 +150,22 @@ sub _rustfs_instances {
 # assembled at run time, so the command text itself never matches it.  The
 # job's files are readable by root only, so the verified probe runs curl
 # under sudo.
+#
+# host is the address to dial, 127.0.0.1 when it is undef.  An IPv6 address
+# is bracketed, and curl runs with -g so that it reads the brackets as part
+# of the address.
 sub _probe_command {
-  my ($class, $port) = @_;
-  my $url = "https://127.0.0.1:$port/health/ready";
+  my ($class, $port, $host) = @_;
+  $host = '127.0.0.1' unless defined($host) && $host ne '';
+  $host = "[$host]" if $host =~ /:/ && $host !~ /^\[/;
+  my $url = "https://$host:$port/health/ready";
   my $ca  = CA_FILE;
   return join('; ',
     'p=RUSTFS',
     "url=$url",
     "ca=$ca",
     'if sudo -n grep -q "BEGIN CERTIFICATE" "$ca" 2>/dev/null; then ' .
-      'sudo -n curl -fsS --max-time 5 -o /dev/null --cacert "$ca" "$url"; rc=$?; why=cert; ' .
+      'sudo -n curl -g -fsS --max-time 5 -o /dev/null --cacert "$ca" "$url"; rc=$?; why=cert; ' .
     'else rc=60; why=noca; fi',
     # 77 means curl could not read the CA file.
     'if [ "$rc" -eq 77 ]; then rc=60; why=noca; fi',
@@ -143,7 +173,7 @@ sub _probe_command {
     # 60 is curl's code for a certificate it could not verify.  Anything
     # else is a real failure that skipping verification would not change.
     'if [ "$rc" -ne 60 ]; then echo "${p}_PROBE=failed:$rc"; exit 0; fi',
-    'curl -fsSk --max-time 5 -o /dev/null "$url"; rc=$?',
+    'curl -g -fsSk --max-time 5 -o /dev/null "$url"; rc=$?',
     'if [ "$rc" -eq 0 ]; then echo "${p}_PROBE=unverified:$why"; else echo "${p}_PROBE=failed:$rc"; fi',
     'exit 0',
   );
@@ -152,9 +182,9 @@ sub _probe_command {
 
 # _probe_node - probe the health endpoint of one rustfs instance {{{
 sub _probe_node {
-  my ($self, $target, $port) = @_;
+  my ($self, $target, $port, $host) = @_;
 
-  info("  Probing health of #C{$target}...");
+  info("  Probing health of #C{$target} at #C{%s}...", defined($host) ? $host : '127.0.0.1');
 
   # Route through $self->env->bosh->execute rather than a bare `bosh -e
   # <alias>`, because execute() sets BOSH_ENVIRONMENT to the director URL
@@ -163,7 +193,7 @@ sub _probe_node {
     $self->env->bosh->execute(
       { stderr => 0, deployment => $self->env->deployment_name },
       'ssh', $target,
-      '--command', ref($self)->_probe_command($port),
+      '--command', ref($self)->_probe_command($port, $host),
       '--results',
     );
   };
@@ -184,7 +214,7 @@ sub _probe_node {
   } elsif ($result eq 'unverified:cert') {
     info(
       "    #Y{[warn]} $target is ready, but its certificate did not verify against ".
-      "the kit CA - rotate #C{certs/api} and redeploy"
+      "the kit CA for that address - rotate #C{certs/api} and redeploy"
     );
   } elsif ($result eq 'unverified:noca') {
     info(

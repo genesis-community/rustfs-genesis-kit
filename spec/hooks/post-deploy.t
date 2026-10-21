@@ -65,6 +65,7 @@ package StubBosh {
 package StubEnv {
 	sub new { my ($c, %o) = @_; bless {%o}, $c }
 	sub bosh { $_[0]{bosh} }
+	sub features { @{$_[0]{features} // []} }
 	sub deployment_name { 'spec-rustfs' }
 	sub exodus_lookup {
 		my ($self, $key, $default) = @_;
@@ -82,8 +83,12 @@ package main;
 
 $ENV{GENESIS_ENVIRONMENT} = 'spec-rustfs';
 
+# instances_json lists instances by name, or by [name, ips] pairs.
 sub instances_json {
-	my @rows = map {{instance => $_, process_state => 'running'}} @_;
+	my @rows = map {
+		ref($_) ? {instance => $_->[0], ips => $_->[1], process_state => 'running'}
+		        : {instance => $_, process_state => 'running'}
+	} @_;
 	return JSON::PP->new->encode({Tables => [{Rows => \@rows}]});
 }
 
@@ -97,6 +102,7 @@ sub run_hook {
 		bosh   => $bosh,
 		exodus => $o{exodus} // {s3_api_url => 'https://10.99.1.30:9000', s3_console_url => 'https://10.99.1.30:9001', instances => 3},
 		params => $o{params} // {},
+		features => $o{features} // [],
 	);
 	my $hook = bless {env => $env, rc => $o{rc}, complete => 0}, $class;
 	local $ENV{GENESIS_DEPLOY_RC};
@@ -200,6 +206,50 @@ for my $case ([8443, 8443], ['8443', 8443], [0, 9000], [70000, 9000], ['https', 
 	like($ssh->[4], qr{https://127\.0\.0\.1:$expect/health/ready}, "params.rustfs_port $label probes port $expect");
 }
 
+# ---- probe address -------------------------------------------------------
+
+{
+	my ($hook, $bosh, $out) = run_hook(rc => 0,
+		params => {'params.ips' => ['10.99.1.30', '10.99.2.30']},
+		bosh => {
+			instances_json => instances_json(['rustfs/a', '10.99.1.30'], ['rustfs/b', '10.99.2.30']),
+			ssh => {'rustfs/a' => $ok_marker, 'rustfs/b' => $ok_marker},
+		});
+	my @cmds = map {$_->[4]} grep {$_->[1] eq 'ssh'} $bosh->calls;
+	like($cmds[0], qr{url=https://10\.99\.1\.30:9000/health/ready}, 'with params.ips the probe dials the first node at its own address');
+	like($cmds[1], qr{url=https://10\.99\.2\.30:9000/health/ready}, 'with params.ips the probe dials the second node at its own address');
+	unlike($out, qr/params\.ips is not set/, 'no loopback note when params.ips is set');
+}
+
+{
+	my ($hook, $bosh) = run_hook(rc => 0, features => ['ocfp'], bosh => {
+		instances_json => instances_json(['rustfs/a', 'fd00::5']),
+		ssh => {'rustfs/a' => $ok_marker},
+	});
+	my ($ssh) = grep {$_->[1] eq 'ssh'} $bosh->calls;
+	like($ssh->[4], qr{url=https://\[fd00::5\]:9000/health/ready}, 'under ocfp the probe dials the node address, bracketed for IPv6');
+	like($ssh->[4], qr{curl -g }, 'the probe tells curl not to glob the brackets');
+}
+
+{
+	my ($hook, $bosh, $out) = run_hook(rc => 0,
+		params => {'params.ips' => ['10.99.1.30', '10.99.2.30', '10.99.3.30']},
+		exodus => {instances => 3, ips => '10.99.1.30,10.99.2.30,10.99.3.30'},
+		bosh => {instances_rc => 1, instances_json => '', ssh => {map {("rustfs/$_" => $ok_marker)} 0..2}});
+	my @cmds = map {$_->[4]} grep {$_->[1] eq 'ssh'} $bosh->calls;
+	like($cmds[2], qr{url=https://10\.99\.3\.30:9000/}, 'without BOSH the node addresses come from the exodus ips');
+}
+
+{
+	my ($hook, $bosh, $out) = run_hook(rc => 0, bosh => {
+		instances_json => instances_json(['rustfs/a', '10.99.1.30']),
+		ssh => {'rustfs/a' => $ok_marker},
+	});
+	my ($ssh) = grep {$_->[1] eq 'ssh'} $bosh->calls;
+	like($ssh->[4], qr{url=https://127\.0\.0\.1:9000/}, 'without params.ips the probe dials loopback, which the certificate names');
+	like($out, qr/params\.ips is not set/, 'the loopback probe is noted');
+}
+
 # ---- probe results -------------------------------------------------------
 
 for my $case (
@@ -214,7 +264,7 @@ for my $case (
 	@printed = ();
 	my $bosh = StubBosh->new(ssh => {'rustfs/a' => ["rustfs/a: stdout | $stdout\n", 0]});
 	my $hook = bless {env => StubEnv->new(bosh => $bosh)}, $class;
-	is($hook->_probe_node('rustfs/a', 9000), $expect, "'$stdout' is read as $expect");
+	is($hook->_probe_node('rustfs/a', 9000, '10.99.1.30'), $expect, "'$stdout' is read as $expect");
 	like(printed(), $message, "'$stdout' is reported");
 }
 
