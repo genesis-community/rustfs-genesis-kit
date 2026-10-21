@@ -1,4 +1,4 @@
-package Genesis::Hook::Addon::RustFS::ResetCredentials v0.1.0;
+package Genesis::Hook::Addon::RustFS::ResetCredentials v0.2.0;
 
 use v5.20;
 use warnings;
@@ -38,8 +38,22 @@ sub perform {
   my $access_key_path = $env->secrets_base . 'credentials:access_key';
   my $secret_key_path = $env->secrets_base . 'credentials:secret_key';
 
+  # RustFS nodes authenticate to each other with the root credentials, so a
+  # node that restarts with new ones cannot rejoin peers that still hold the
+  # old ones, and a rolling deploy stops at the first node.  A cluster has
+  # to stop every node, deploy while they are stopped, and start them again.
+  my $instances = $env->exodus_lookup('instances', 1);
+  my $cluster = $env->exodus_lookup('cluster', 0) || ($instances =~ /^\d+$/ && $instances > 1);
+
   info("");
-  info("#Y{WARNING}: This will rotate RustFS credentials and trigger a redeploy.");
+  info("#Y{WARNING}: This will rotate RustFS credentials, and they take effect on the next deploy.");
+  if ($cluster) {
+    info("");
+    info("This is a cluster, so every node must restart with the new credentials at");
+    info("the same time, and the cluster serves nothing for a few minutes. A rolling");
+    info("deploy cannot apply them, because a node with new credentials cannot rejoin");
+    info("peers that still hold the old ones.");
+  }
   info("");
   info("Vault paths that will be regenerated:");
   info("  #C{%s}", $access_key_path);
@@ -76,8 +90,20 @@ sub perform {
   info("  #g{[ok]} secret_key rotated");
 
   info("");
-  info("Credentials rotated. Redeploy to apply new credentials:");
-  info("  #G{genesis deploy %s}", $env_name);
+  if ($cluster) {
+    info("Credentials rotated. Apply them by stopping every node, deploying while the");
+    info("nodes are stopped, and starting them again:");
+    info("");
+    info("  #G{genesis %s bosh stop --skip-drain rustfs}", $env_name);
+    info("  #G{genesis deploy %s}", $env_name);
+    info("  #G{genesis %s bosh start rustfs}", $env_name);
+    info("");
+    info("Do not run the deploy while the nodes are running. Its first node would fail");
+    info("post-start, and BOSH then refuses to stop the deployment until a deploy succeeds.");
+  } else {
+    info("Credentials rotated. Redeploy to apply new credentials:");
+    info("  #G{genesis deploy %s}", $env_name);
+  }
   info("");
   info("#Y{Note}: Existing S3 clients will fail authentication until the redeploy completes.");
 

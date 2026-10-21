@@ -142,7 +142,10 @@ sub _find_mc {
 # _install_ca - write the kit CA into mc's CAs directory {{{
 sub _install_ca {
   my ($alias, $ca) = @_;
-  my $dir = "$ENV{HOME}/.mc/certs/CAs";
+  # mc reads its config, and the CAs it trusts, from MC_CONFIG_DIR when
+  # that is set, and from ~/.mc otherwise.
+  my $base = (defined($ENV{MC_CONFIG_DIR}) && $ENV{MC_CONFIG_DIR} ne '') ? $ENV{MC_CONFIG_DIR} : "$ENV{HOME}/.mc";
+  my $dir = "$base/certs/CAs";
   make_path($dir, {mode => 0700}) unless -d $dir;
   my $file = "$dir/$alias.crt";
   open(my $fh, '>', $file) or bail("Could not write %s: %s", $file, $!);

@@ -140,7 +140,7 @@ deploy. Paths relative to `{vault_mount}/{env}/rustfs/`:
 
 Internode traffic uses the API certificate, which names every node's address.
 
-Rotate admin credentials with the `reset-credentials` addon. The credentials are marked `fixed`, so `genesis rotate-secrets` leaves them alone. Renew the certificates with `genesis my-rustfs rotate-secrets certs/api`, or `certs/` for all of them. Avoid `--regen-x509-keys` on a running cluster, because a new CA splits the nodes in two during the rolling deploy.
+Rotate admin credentials with the `reset-credentials` addon. A cluster must stop every node before the deploy that applies them, because the nodes authenticate to each other with these credentials, and the MANUAL gives the commands. The credentials are marked `fixed`, so `genesis rotate-secrets` leaves them alone. Renew the certificates with `genesis my-rustfs rotate-secrets certs/api`, or `certs/` for all of them. Avoid `--regen-x509-keys` on a running cluster, because a new CA splits the nodes in two during the rolling deploy.
 
 ## License
 

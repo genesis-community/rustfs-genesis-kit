@@ -96,6 +96,8 @@ sub run_hook {
 	local $ENV{HOME} = "$work/home";
 	local $ENV{PATH} = $o{no_mc} ? $bin : "$bin:/usr/bin:/bin";
 	local $ENV{FAKE_MC_DIR} = $work;
+	local $ENV{MC_CONFIG_DIR} = $o{mc_config_dir} ? "$work/$o{mc_config_dir}" : undef;
+	delete $ENV{MC_CONFIG_DIR} unless $o{mc_config_dir};
 	my $vault = StubVault->new(data => {'/secret/spec/lab/rustfs/credentials:secret_key' => exists($o{secret}) ? $o{secret} : "$secret\n"});
 	my $env = StubEnv->new(vault => $vault, exodus => $o{exodus} // {
 		s3_api_url => 'https://10.99.1.30:9000', access_key => 'AKSPEC', ca => $ca,
@@ -121,6 +123,13 @@ sub run_hook {
 	my $ca_file = "$work/home/.mc/certs/CAs/rustfs-spec-lab.crt";
 	is(slurp($ca_file), $ca, 'the kit CA is installed where mc trusts it');
 	like($out, qr/\Q$ca_file\E/, 'the addon says where it installed the CA');
+}
+
+{
+	my ($result, $error, $out, $work) = run_hook(mc_config_dir => 'mcconf');
+	is($error, '', 'the addon completes with MC_CONFIG_DIR set') or diag $error;
+	is(slurp("$work/mcconf/certs/CAs/rustfs-spec-lab.crt"), $ca, 'the kit CA goes under MC_CONFIG_DIR when it is set');
+	ok(!-e "$work/home/.mc/certs/CAs/rustfs-spec-lab.crt", 'and not under ~/.mc');
 }
 
 # ---- failures ------------------------------------------------------------

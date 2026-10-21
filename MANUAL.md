@@ -245,9 +245,20 @@ VM if it fails.
 genesis my-rustfs do reset-credentials
 ```
 
-Rotates the admin `access_key` and `secret_key` in vault. The new credentials
-take effect on the next `genesis deploy`. Existing S3 clients will fail
-authentication until reconfigured with the new credentials.
+Rotates the admin `access_key` and `secret_key` in vault. The new credentials take effect on the next deploy, and existing S3 clients fail authentication until we reconfigure them with the new credentials.
+
+A single node only needs `genesis deploy my-rustfs` after the addon. A cluster needs more, because RustFS nodes authenticate to each other with these credentials. A node that restarts with the new credentials cannot rejoin peers that still hold the old ones, so a rolling deploy stops at the first node, whose post-start waits for readiness that never comes. We apply new credentials to a cluster by stopping every node, deploying while they are stopped, and starting them again:
+
+```bash
+genesis my-rustfs do reset-credentials
+genesis my-rustfs bosh stop --skip-drain rustfs
+genesis deploy my-rustfs
+genesis my-rustfs bosh start rustfs
+```
+
+The deploy updates the stopped nodes without starting them, and `bosh start` brings them back through the cold-start path of post-start, so the cluster forms with the new credentials. The cluster serves nothing from the stop until the start finishes, which took about three minutes for three nodes in our tests. The addon prints these commands when the environment is a cluster.
+
+If a deploy already ran while the nodes were running, its first node failed post-start, and BOSH may then refuse `bosh stop` because the new credentials were never versioned for the whole deployment. We recover by stopping the RustFS process on every node that the failed deploy did not reach, with `genesis my-rustfs bosh ssh rustfs/<index> -c 'sudo /var/vcap/bosh/bin/monit stop rustfs-server'`, and running `genesis deploy my-rustfs` again. With no ready peer, each node passes post-start on liveness, and the last one waits until the cluster serves reads.
 
 The addon generates random values. The access key is 20 characters long, and the secret key is 40 characters long, which matches what `genesis add-secrets` creates. Both credentials are marked `fixed` in the kit, so `genesis rotate-secrets` leaves them alone, and this addon is the only way to rotate them.
 
@@ -261,7 +272,7 @@ The addon configures an alias for this deployment in the MinIO Client (`mc`), so
 
 The secret key never appears in the addon's output or on a command line. The addon hands both keys to `mc alias set` on stdin, which `mc` reads when the keys are missing from its arguments and stdin is not a terminal, and `mc` stores them in its own config under `~/.mc`. If `mc` reports an error that repeats the secret, the addon replaces it with `<redacted>`.
 
-The addon also writes the kit CA to `~/.mc/certs/CAs/rustfs-<env>.crt`. `mc` trusts every certificate in that directory, so every `mc` command verifies the API certificate without `--insecure`. When the exodus data holds no CA, the alias falls back to `--insecure`, the addon warns about it, and the commands it prints carry the flag.
+The addon also writes the kit CA to `~/.mc/certs/CAs/rustfs-<env>.crt`. When `MC_CONFIG_DIR` is set, the addon writes the CA under that directory instead, because that is where `mc` then looks. `mc` trusts every certificate in that directory for every alias, so every `mc` command verifies the API certificate without `--insecure`. When the exodus data holds no CA, the alias falls back to `--insecure`, the addon warns about it, and the commands it prints carry the flag.
 
 The addon needs `mc` (or `mcli`) on the `PATH`. MinIO no longer publishes `mc` binaries at dl.min.io, so we build it from a release tag of [minio/mc](https://github.com/minio/mc), for example with `go install github.com/minio/mc@RELEASE.2025-08-13T08-35-41Z`. Without `mc`, the addon stops and prints a command that pipes the keys to `mc alias set` from `safe`, so that we can configure the alias by hand later.
 
@@ -429,7 +440,7 @@ The access and secret keys are marked `fixed`, so neither form of `rotate-secret
 
 ### Credential Rotation
 
-Use the `reset-credentials` addon as described above, then redeploy.
+We rotate the credentials with the [reset-credentials](#reset-credentials-r) addon. A single node then needs a deploy, and a cluster needs the stop, deploy, and start sequence that the addon section describes.
 
 ### Accessing the Console
 
