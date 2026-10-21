@@ -36,7 +36,7 @@
 
 ### Changed
 
-- The kit pins the rustfs release to 0.2.0+dev.2, which carries RustFS 1.0.3 with a readiness wait in post-start, a bounded drain, and CA verification in the smoke-tests errand. The final release's url and sha1 replace this dev pin once it is published.
+- The kit pins the rustfs release to 0.2.0, which carries RustFS 1.0.3 with a readiness wait in post-start, a bounded drain, and CA verification in the smoke-tests errand. The pin carries the GitHub release url and sha1, so BOSH fetches the release during the deploy.
 
 - `manifests/releases/bpm.yml` pins bpm 1.4.22 with its bosh.io url and sha1 instead of `latest`, because bpm 1.4.31 cannot start any process on a noble stemcell.
 

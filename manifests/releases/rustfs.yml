@@ -1,18 +1,6 @@
-# rustfs 0.2.0+dev.2 is a dev release of RustFS 1.0.3 with resolute support,
-# built from release commit 2f5dd36 on the resolute branch.  It adds the
-# post-start readiness wait, the bounded drain, and the rustfs.tls.ca property
-# of the smoke-tests errand, which the kit sets.
-# It has no public tarball yet, so build it from the release repository
-# (src/releases/rustfs) at that commit and upload it to the director before
-# deploying:
-#
-#   cd src/releases/rustfs
-#   git checkout 2f5dd36
-#   bosh create-release --name rustfs --version 0.2.0+dev.2 --tarball=/tmp/rustfs-0.2.0+dev.2.tgz
-#   genesis <env> bosh upload-release /tmp/rustfs-0.2.0+dev.2.tgz
-#
-# When the 0.2.0 final is published, its version, url, and sha1 replace this
-# dev pin, so that Genesis can upload the release itself.
+---
 releases:
 - name:    rustfs
-  version: 0.2.0+dev.2
+  version: 0.2.0
+  url:     https://github.com/cloudfoundry-community/rustfs-boshrelease/releases/download/v0.2.0/rustfs-0.2.0.tgz
+  sha1:    18f655b328221bf602b5c9659b97a0fb397f9545

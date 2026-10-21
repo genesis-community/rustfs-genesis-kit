@@ -14,7 +14,7 @@ discovery. No external coordination service is required.
 - Web console on port 9001
 - BOSH-link-driven cluster peer discovery, for a single node or a cluster of three or more nodes
 - BPM process management
-- RustFS 1.0.3 through the rustfs BOSH release 0.2.0+dev.2
+- RustFS 1.0.3 through the rustfs BOSH release 0.2.0
 - Ubuntu Noble (24.04) stemcells by default, or Ubuntu Resolute (26.04) with the `resolute` feature
 - Optional Cloud Foundry route registration via `route-registrar` feature
 - Apache 2.0 license
