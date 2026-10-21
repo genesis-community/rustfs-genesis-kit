@@ -42,8 +42,10 @@ sub perform {
   } else {
     $self->_check_noble_bpm($manifest);
   }
-  $self->_check_api_cert($manifest);
+  # The node count comes first, because a refused count change makes the
+  # certificate advice moot, and rotating certs/api for it would be wasted.
   $self->_check_node_count($manifest);
+  $self->_check_api_cert($manifest);
 
   info("");
   info("#M{$name} - RustFS pre-deploy");
