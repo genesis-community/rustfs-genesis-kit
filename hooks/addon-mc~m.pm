@@ -113,7 +113,7 @@ sub perform {
   info("  Upload a file:               #G{mc %scp <local-file> %s/<bucket-name>/}", _flags(@insecure), $alias);
   info("  Download a file:             #G{mc %scp %s/<bucket-name>/<file> <local-dest>}", _flags(@insecure), $alias);
   info("  Remove a bucket (recursive): #G{mc %srb --force %s/<bucket-name>}",   _flags(@insecure), $alias);
-  info("  Show cluster info:           #G{mc %sadmin info %s}",                 _flags(@insecure), $alias);
+  info("  Show space used per bucket:  #G{mc %sdu --depth 2 %s}",               _flags(@insecure), $alias);
   info("");
   info("Remove the alias with #G{mc alias remove %s}.", $alias);
   info("");

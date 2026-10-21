@@ -18,7 +18,7 @@
 
 - The manifest sets `features.use_dns_addresses: false`, so BOSH links hand peers the IP addresses that the API certificate names.
 
-- The pre-deploy hook refuses a deploy that changes the node count of a running deployment, because RustFS records its erasure layout on the drives and nodes refuse to start over a different one. It reads the deployed count from BOSH, or from the exodus `instances` value when BOSH cannot answer. `params.allow_node_count_change: true` lets a cluster change size, but nothing lets a single node grow into a cluster, because RustFS formats a lone drive as single-node single-drive and logs `unsupported pool expansion` when asked to expand it. The refusal lists the steps to move the data to a new deployment.
+- The pre-deploy hook refuses a deploy that changes the node count of a running deployment, because RustFS records its erasure layout on the drives and nodes refuse to start over a different one. It reads the deployed count from BOSH, or from the exodus `instances` value when BOSH cannot answer. `params.allow_node_count_change: true` lets a cluster change size, but nothing lets a single node grow into a cluster, because RustFS formats a lone drive as single-node single-drive and logs `unsupported pool expansion` when asked to expand it. The refusal points at the section "Changing the Node Count" in the kit manual and names `genesis <env> kit-manual`.
 
 - The pre-deploy hook reads the public API certificate from vault and refuses the deploy when it does not name `127.0.0.1` and every address in `meta.api_cert_ips`. The message says to run `genesis <env> rotate-secrets certs/api`. The hook never reads the private key.
 
@@ -66,13 +66,19 @@
 
 - The post-deploy hook reads the instance list from BOSH, and it falls back to the exodus `instances` count, which the manifest now exports. It reads the exodus URLs through `exodus_lookup` and runs `bosh ssh` through the environment's BOSH connection, where it used to call `safe` and a bare `bosh -e` itself. It skips its checks when the deploy return code is missing or not zero.
 
+- The `mc` addon passes the access and secret keys to `mc alias set` on stdin, so the secret never reaches a command line, and it redacts the secret from any mc output it shows. It installs the kit CA in `~/.mc/certs/CAs/`, so mc verifies the API certificate, and it falls back to `--insecure` with a warning only when exodus holds no CA. It names the alias `rustfs-<env>` and accepts `mcli` as well as `mc`. When neither is on the PATH, it prints a `safe` and `mc` pipeline that configures the alias by hand, without reading the secret. It used to print the secret in an `mc alias set` command and to read it from a vault path that did not exist.
+
+- The `reset-credentials` addon reads and writes the credentials under the environment's secrets base through the environment's vault target. It used to build the path from a method that does not exist and to pass the environment name to `safe -T`.
+
+- The MANUAL describes how to change the node count by building a new cluster beside the old one, or by rebuilding the same environment in place, with `mc mirror` and the bucket and IAM exports. It also lists the CF environment change that makes gorouter trust the kit CA for the route-registrar routes, through the exodus `ca` value.
+
 - The README and MANUAL describe RustFS 1.0.3, the resolute feature, the corrected defaults, the TLS requirements of a cluster, and how to renew the API certificate after the static IPs change.
 
 ### Known limitations
 
 - A change to the static IPs needs `genesis rotate-secrets certs/api` before the deploy, because `genesis deploy` does not renew a certificate whose names no longer match. `check-secrets` reports each missing address, and the pre-deploy hook refuses the deploy until the certificate names them.
 
-- The node count is fixed for the life of a deployment. Changing it means copying the data out, deploying fresh, and copying it back.
+- The node count is fixed for the life of a deployment. Changing it means copying the data to a new deployment, as the MANUAL section "Changing the Node Count" describes. `mc mirror` copies only the latest version of each object.
 
 - `genesis rotate-secrets --regen-x509-keys` replaces the CA, and the nodes stop trusting each other until the rolling deploy reaches all of them.
 
