@@ -52,7 +52,7 @@ var _ = Describe("RustFS Kit", func() {
 			CPI:         "aws",
 		})
 		Test(Environment{
-			Name:        "cluster",
+			Name:        "single-ip",
 			CloudConfig: "aws",
 			CPI:         "aws",
 		})
@@ -60,6 +60,53 @@ var _ = Describe("RustFS Kit", func() {
 			Name:        "cluster-ips",
 			CloudConfig: "aws",
 			CPI:         "aws",
+		})
+	})
+
+	// Peers verify each other's API certificate by IP address, and Genesis
+	// generates it before BOSH assigns addresses from the cloud config.  The
+	// blueprint therefore refuses a cluster without explicit addresses, and
+	// any address list the certificate could not name.
+	Describe("cluster addresses", func() {
+		Test(Environment{
+			Name:        "cluster-without-ips",
+			CloudConfig: "aws",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("to list the static IP address of every node"),
+				GenesisCheck:      refused("to list the static IP address of every node"),
+				GenesisManifest:   refused("to list the static IP address of every node"),
+			},
+		})
+		Test(Environment{
+			Name:        "instances-without-ips",
+			CloudConfig: "aws",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("to list the static IP address of every node"),
+				GenesisCheck:      refused("to list the static IP address of every node"),
+				GenesisManifest:   refused("to list the static IP address of every node"),
+			},
+		})
+		Test(Environment{
+			Name:        "cluster-ip-range",
+			CloudConfig: "aws",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("must be a single IPv4 or IPv6 address"),
+				GenesisCheck:      refused("must be a single IPv4 or IPv6 address"),
+				GenesisManifest:   refused("must be a single IPv4 or IPv6 address"),
+			},
+		})
+		Test(Environment{
+			Name:        "cluster-too-many-ips",
+			CloudConfig: "aws",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("can name at most 16 static IP addresses"),
+				GenesisCheck:      refused("can name at most 16 static IP addresses"),
+				GenesisManifest:   refused("can name at most 16 static IP addresses"),
+			},
 		})
 	})
 

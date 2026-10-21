@@ -6,7 +6,7 @@ kit:
   - cluster
 
 genesis:
-  env:      cluster
+  env:      cluster-without-ips
   entomb:   false
 
 params: {}

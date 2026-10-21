@@ -5,11 +5,11 @@
 # up to 16 nodes. The static_ips operator only consumes as many addresses
 # as params.instances requires; the remainder are unused.
 #
-# Peers reach each other over https on the API port, so every peer's API
-# certificate must name that peer's IP address.  The kit's api certificate
-# names only the kit domain and 127.0.0.1, so a cluster that uses it
-# fails the TLS handshake between peers.  See the MANUAL before enabling
-# this feature.
+# Peers reach each other over https on the API port, so the API
+# certificate names every peer's IP address.  Genesis generates it before
+# BOSH assigns addresses, so the blueprint refuses a cluster unless
+# params.ips or the ocfp feature lists the addresses.  The static range
+# below then only serves a cluster scaled down to one instance.
 
 meta:
   default:

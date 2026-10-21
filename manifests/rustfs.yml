@@ -9,11 +9,19 @@ meta:
 
 exodus:
   ips:            (( grab instance_groups.rustfs.networks[0].static_ips ))
+  instances:      (( grab instance_groups.rustfs.instances ))
   domain:         (( grab meta.domain ))
   s3_api_url:     (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9000" ))
   s3_console_url: (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9001" ))
   ca:             (( vault meta.vault "/certs/ca:certificate" ))
   access_key:     (( vault meta.vault "/credentials:access_key" ))
+
+# Links hand out IP addresses, never BOSH DNS names, even on a director that
+# turns use_dns_addresses on.  Peers dial the addresses in the rustfs-peer
+# link and verify the API certificate against them, and that certificate
+# names the static IPs.
+features:
+  use_dns_addresses: false
 
 instance_groups:
 - name: rustfs

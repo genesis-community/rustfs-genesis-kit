@@ -1,0 +1,13 @@
+---
+kit:
+  name:    dev
+  version: latest
+  features: []
+
+genesis:
+  env:      single-ip
+  entomb:   false
+
+params:
+  ips:
+  - 10.99.1.40

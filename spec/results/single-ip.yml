@@ -1,22 +1,20 @@
 exodus:
   access_key: <!{meta.vault}/credentials:access_key!>
-  bosh: cluster
+  bosh: single-ip
   ca: <!{meta.vault}/certs/ca:certificate!>
-  cluster: true
-  cluster_size: 3
   domain: rustfs.bosh
-  features: cluster
+  features: ""
   iaas: null
-  ips:
-  - 10.99.1.16
-  - 10.99.1.17
-  - 10.99.1.18
+  instances: 1
+  ips: 10.99.1.40
   is_director: false
-  s3_api_url: https://10.99.1.16:9000
-  s3_console_url: https://10.99.1.16:9001
+  s3_api_url: https://10.99.1.40:9000
+  s3_console_url: https://10.99.1.40:9001
   scale: null
   services: s3
   use_create_env: false
+features:
+  use_dns_addresses: false
 instance_groups:
 - azs:
   - z1
@@ -24,7 +22,7 @@ instance_groups:
   - z3
   env:
     persistent_disk_fs: xfs
-  instances: 3
+  instances: 1
   jobs:
   - consumes:
       rustfs-peer:
@@ -66,9 +64,7 @@ instance_groups:
   networks:
   - name: rustfs
     static_ips:
-    - 10.99.1.16
-    - 10.99.1.17
-    - 10.99.1.18
+    - 10.99.1.40
   persistent_disk_type: default
   stemcell: default
   vm_type: default
@@ -99,7 +95,7 @@ instance_groups:
   - name: rustfs
   stemcell: default
   vm_type: default
-name: cluster-rustfs
+name: single-ip-rustfs
 releases:
 - name: rustfs
   version: 0.2.0+dev.1
@@ -107,10 +103,6 @@ releases:
   sha1: sha256:51f2eab4b59939db733beb8f7905e461a732cc29d85e54f151f576cd5bf0c414
   url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.22
   version: 1.4.22
-- name: bosh-dns-aliases
-  sha1: sha256:27ef8965dc4f1633479613743e782566e3b7fba5d28dad3d50488c2919eac0da
-  url: https://bosh.io/d/github.com/cloudfoundry/bosh-dns-aliases-release?v=0.0.4
-  version: 0.0.4
 stemcells:
 - alias: default
   os: ubuntu-noble

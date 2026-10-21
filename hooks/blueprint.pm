@@ -9,6 +9,11 @@ BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/
 use parent qw(Genesis::Hook::Blueprint);
 
 use Genesis qw/bail info warning error mkfile_or_fail count_nouns/;
+use Socket qw/inet_pton AF_INET AF_INET6/;
+
+# The number of meta.api_cert_ips slots that kit.yml names in the API
+# certificate.  Keep the two in step.
+use constant API_CERT_IP_SLOTS => 16;
 
 sub init {
 	my $class = shift;
@@ -29,6 +34,9 @@ sub perform {
 
 	my $iaas = $self->iaas;
 	my $ips  = scalar($self->env->lookup('params.ips', []));
+
+	# Every static IP the blueprint assigns, which the API certificate names.
+	my @cert_ips = ();
 
 	# Track which optional releases have been added to avoid duplicates
 	my %added_releases;
@@ -98,6 +106,7 @@ sub perform {
 		# networks: the base manifest value is a literal array, so a leading
 		# (( replace )) correctly discards it and pins the ocfp network + static
 		# IPs (mirrors the shield ocfp manifest).
+		@cert_ips = @ips;
 		$dynamic_static_fragment = <<"EOF";
 exodus:
   ips: ${\(join ',', @ips)}
@@ -131,7 +140,11 @@ EOF
 EOF
 		}
 
+	} elsif (ref($ips) ne 'ARRAY') {
+		bail("#c{params.ips} must be a list of IP addresses, one per RustFS instance.");
+
 	} elsif (my $instances = scalar(@$ips)) {
+		@cert_ips = @$ips;
 		$dynamic_static_fragment = <<"EOF";
 exodus:
   ips: ${\(join ',', @$ips)}
@@ -185,6 +198,10 @@ EOF
 		}
 	}
 
+	$self->_check_cluster_addresses(scalar(@cert_ips));
+	$dynamic_static_fragment .= $self->_api_cert_ips_fragment(@cert_ips)
+		if @cert_ips;
+
 	# The static IP fragment goes after every feature fragment.  cluster.yml
 	# sets its own static_ips, and when it came later it replaced params.ips
 	# and, under ocfp, appended a second network to the instance group.
@@ -204,6 +221,70 @@ EOF
 
 	return $self->done(1);
 }
+
+# _api_cert_ips_fragment - meta.api_cert_ips for the API certificate names {{{
+# kit.yml names the API certificate after meta.api_cert_ips, one maybe: slot
+# per address, because Genesis dereferences kit metadata as scalars.  The
+# list is written only from addresses the blueprint knows before the cloud
+# config is merged, since `genesis add-secrets` and `check-secrets` build the
+# certificate names without downloading it.
+sub _api_cert_ips_fragment {
+	my ($self, @ips) = @_;
+
+	my @invalid = grep {!_is_ip_address($_)} @ips;
+	bail(
+		"The RustFS API certificate names every static IP address, so each " .
+		"address in #c{params.ips} or the ocfp #c{rustfs_ip} reservations " .
+		"must be a single IPv4 or IPv6 address.  These are not: %s",
+		join(', ', map {defined($_) ? (ref($_) ? 'a '.lc(ref($_)) : "'$_'") : 'null'} @invalid)
+	) if @invalid;
+
+	bail(
+		"The RustFS API certificate can name at most %d static IP addresses, " .
+		"but this environment assigns %d.  Deploy at most %d instances.",
+		API_CERT_IP_SLOTS, scalar(@ips), API_CERT_IP_SLOTS
+	) if @ips > API_CERT_IP_SLOTS;
+
+	return "\nmeta:\n  api_cert_ips:" . join('', map {"\n  - $_"} @ips) . "\n";
+}
+# }}}
+
+# _check_cluster_addresses - refuse a cluster whose addresses are unknown {{{
+# Without params.ips or ocfp, BOSH picks the static IPs from the cloud
+# config's range at deploy time.  Genesis generates the API certificate
+# before that, so the certificate could not name the peers, and every peer
+# handshake would fail.  A single node never dials a peer, so it may still
+# take its address from the cloud config.
+sub _check_cluster_addresses {
+	my ($self, $known_ips) = @_;
+	return if $known_ips;
+
+	my $default   = $self->want_feature('cluster') ? 3 : 1;
+	my $instances = scalar($self->env->lookup('params.instances', $default));
+	return unless defined($instances) && !ref($instances)
+		&& $instances =~ /^\s*\d+\s*$/ && $instances > 1;
+
+	bail(
+		"A RustFS cluster needs #c{params.ips} to list the static IP address of " .
+		"every node, or the #c{ocfp} feature to supply them.  Peers verify each " .
+		"other's API certificate by IP address, and Genesis generates that " .
+		"certificate before BOSH assigns addresses from the cloud config, so " .
+		"without the list the peers cannot form a cluster."
+	);
+}
+# }}}
+
+# _is_ip_address - true for a single IPv4 or IPv6 address {{{
+# inet_pton accepts exactly one address in the standard text forms, so it
+# refuses BOSH ranges such as "10.0.0.10-10.0.0.12" and CIDR blocks.
+sub _is_ip_address {
+	my ($ip) = @_;
+	return 0 unless defined($ip) && !ref($ip) && $ip ne '';
+	return 1 if defined(inet_pton(AF_INET, $ip));
+	return 1 if $ip =~ /:/ && defined(inet_pton(AF_INET6, $ip));
+	return 0;
+}
+# }}}
 
 # _process_resolute - Opt-in ubuntu-resolute stemcell support {{{
 # Called after every other fragment is added so that it overrides the

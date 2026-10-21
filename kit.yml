@@ -44,9 +44,31 @@ certificates:
         names:
           - rustfs_cluster_peer
           - 127.0.0.1
-      # Client-facing S3 API TLS certificate.
+      # S3 API certificate, which also carries internode RPC.  Peers dial each
+      # other at their static IPs over https and verify this certificate, so
+      # it names every node's address.  The blueprint writes those addresses
+      # to meta.api_cert_ips whenever params.ips or the ocfp subnets supply
+      # them.  Genesis dereferences scalars only, so each list slot is its own
+      # maybe: entry, and the slots past the end of the list drop out.  The
+      # blueprint refuses more addresses than there are slots.
       api:
         valid_for: 2y
         names:
           - "${meta.domain}"
           - 127.0.0.1
+          - "${maybe:meta.api_cert_ips.0}"
+          - "${maybe:meta.api_cert_ips.1}"
+          - "${maybe:meta.api_cert_ips.2}"
+          - "${maybe:meta.api_cert_ips.3}"
+          - "${maybe:meta.api_cert_ips.4}"
+          - "${maybe:meta.api_cert_ips.5}"
+          - "${maybe:meta.api_cert_ips.6}"
+          - "${maybe:meta.api_cert_ips.7}"
+          - "${maybe:meta.api_cert_ips.8}"
+          - "${maybe:meta.api_cert_ips.9}"
+          - "${maybe:meta.api_cert_ips.10}"
+          - "${maybe:meta.api_cert_ips.11}"
+          - "${maybe:meta.api_cert_ips.12}"
+          - "${maybe:meta.api_cert_ips.13}"
+          - "${maybe:meta.api_cert_ips.14}"
+          - "${maybe:meta.api_cert_ips.15}"

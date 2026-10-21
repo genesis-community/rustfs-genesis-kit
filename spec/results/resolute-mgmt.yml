@@ -7,6 +7,7 @@ exodus:
   domain: rustfs.bosh
   features: ocfp,cluster,resolute
   iaas: aws
+  instances: 3
   ips: 10.0.2.190,10.0.3.190,10.0.4.190
   is_director: false
   s3_api_url: https://10.0.2.190:9000
@@ -14,6 +15,8 @@ exodus:
   scale: null
   services: s3
   use_create_env: false
+features:
+  use_dns_addresses: false
 instance_groups:
 - azs:
   - z1

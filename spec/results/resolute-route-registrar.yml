@@ -30,6 +30,7 @@ exodus:
   domain: rustfs.bosh
   features: resolute,route-registrar
   iaas: null
+  instances: 1
   ips:
   - 10.99.1.16
   is_director: false
@@ -38,6 +39,8 @@ exodus:
   scale: null
   services: s3
   use_create_env: false
+features:
+  use_dns_addresses: false
 instance_groups:
 - azs:
   - z1
