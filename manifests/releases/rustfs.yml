@@ -1,6 +1,6 @@
 ---
 releases:
 - name:    rustfs
-  version: 0.2.0
-  url:     https://github.com/cloudfoundry-community/rustfs-boshrelease/releases/download/v0.2.0/rustfs-0.2.0.tgz
-  sha1:    18f655b328221bf602b5c9659b97a0fb397f9545
+  version: 0.2.1
+  url:     https://github.com/cloudfoundry-community/rustfs-boshrelease/releases/download/v0.2.1/rustfs-0.2.1.tgz
+  sha1:    d8bfa237f7c0c4c0fd4780d0f1b24b505c30c3c8

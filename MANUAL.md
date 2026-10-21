@@ -4,7 +4,7 @@ The **RustFS Genesis Kit** deploys a RustFS cluster using BOSH-link peer
 discovery and BPM process management. RustFS is an S3-compatible object
 storage server written in Rust that implements the AWS S3 API.
 
-This kit deploys RustFS 1.0.3 through the rustfs BOSH release 0.2.0. Upstream lists distributed mode as available from RustFS 1.0 onwards, but we still recommend testing node failure, restart, and rejoin against your own workload before a cluster holds important data. A single node has no redundancy, so keep an external backup of it.
+This kit deploys RustFS 1.0.3 through the rustfs BOSH release 0.2.1. Upstream lists distributed mode as available from RustFS 1.0 onwards, but we still recommend testing node failure, restart, and rejoin against your own workload before a cluster holds important data. A single node has no redundancy, so keep an external backup of it.
 
 Peer discovery is automatic through BOSH links. Every node serves the S3 API and internode traffic over TLS on port 9000, and peers verify each other with the kit's CA. The [TLS and Clusters](#tls-and-clusters) section explains what a TLS cluster needs from its certificates.
 
@@ -12,7 +12,7 @@ Peer discovery is automatic through BOSH links. Every node serves the S3 API and
 
 - **BOSH director**, which needs the following releases. The kit pins every release it uses rather than taking `latest`.
 
-  - `rustfs` 0.2.0. The pin carries the GitHub release URL and sha1, so BOSH fetches the release during the deploy.
+  - `rustfs` 0.2.1. The pin carries the GitHub release URL and sha1, so BOSH fetches the release during the deploy.
 
   - `bpm` 1.4.22 on Noble stemcells, or 1.4.41 when the `resolute` feature is on. bpm 1.4.31 cannot start jobs on Noble, and bpm releases older than 1.4.41 do not compile on Resolute. Both pins carry a bosh.io URL, so BOSH fetches bpm during the deploy.
 

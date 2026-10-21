@@ -103,9 +103,9 @@ instance_groups:
 name: cluster-ips-rustfs
 releases:
 - name: rustfs
-  sha1: 18f655b328221bf602b5c9659b97a0fb397f9545
-  url: https://github.com/cloudfoundry-community/rustfs-boshrelease/releases/download/v0.2.0/rustfs-0.2.0.tgz
-  version: 0.2.0
+  sha1: d8bfa237f7c0c4c0fd4780d0f1b24b505c30c3c8
+  url: https://github.com/cloudfoundry-community/rustfs-boshrelease/releases/download/v0.2.1/rustfs-0.2.1.tgz
+  version: 0.2.1
 - name: bpm
   sha1: sha256:51f2eab4b59939db733beb8f7905e461a732cc29d85e54f151f576cd5bf0c414
   url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.22
