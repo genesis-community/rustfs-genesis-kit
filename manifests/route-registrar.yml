@@ -57,18 +57,24 @@ addons:
           client_cert:  (( grab meta.cf.nats.client.cert ))
           client_key:   (( grab meta.cf.nats.client.key ))
       route_registrar:
+        # RustFS serves https only, so gorouter reaches it over TLS on
+        # tls_port.  gorouter checks that the node's API certificate names
+        # server_cert_domain_san, which is meta.domain, and that it chains to
+        # a CA in the CF router.ca_certs property.  Add the kit CA (exodus
+        # ca) there, or gorouter refuses every backend with a 502.
         routes:
-        - name:                  rustfs-s3-api
-          port:                  9000
-          registration_interval: 10s
+        - name:                   rustfs-s3-api
+          tls_port:               (( grab meta.api_port ))
+          server_cert_domain_san: (( grab meta.domain ))
+          registration_interval:  10s
           uris:
             - (( concat meta.routes.api_prefix "." meta.cf.system.domain ))
-        - name:                  rustfs-s3-console
-          port:                  9001
-          registration_interval: 10s
+        - name:                   rustfs-s3-console
+          tls_port:               (( grab meta.console_port ))
+          server_cert_domain_san: (( grab meta.domain ))
+          registration_interval:  10s
           uris:
             - (( concat meta.routes.console_prefix "." meta.cf.system.domain ))
-        host: (( grab meta.cf.system.domain ))
 
 - type: replace
   path: /instance_groups/name=rustfs/jobs/name=bpm?
