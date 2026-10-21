@@ -40,7 +40,7 @@ kit reads CF system domain from CF exodus and registers two routes via
 **ocfp** derives resource names from the OCFP environment convention and
 provides IPs and AZs from OCFP subnet configuration.
 
-**cluster** deploys three nodes by default. Peers verify each other over TLS, so a cluster needs an API certificate that names every node's IP address. The [MANUAL](MANUAL.md#tls-and-clusters) explains why.
+**cluster** deploys three nodes by default. Peers verify each other over TLS, and the API certificate names every node's IP address, so a cluster needs `params.ips` to list those addresses or the `ocfp` feature to supply them. The [MANUAL](MANUAL.md#tls-and-clusters) explains why.
 
 **resolute** moves the deployment to the ubuntu-resolute stemcell and pins bpm 1.4.41. Leave `params.stemcell_os` unset when you use it, because the blueprint refuses a stemcell os that disagrees with the feature.
 

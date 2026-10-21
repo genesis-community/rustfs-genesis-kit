@@ -12,7 +12,13 @@
 
 - The rustfs-server job receives the kit CA as `rustfs.tls.ca`, so cluster peers can verify each other over https.
 
-- A Go spec suite under `spec/` covers the base, cluster, cluster with `params.ips`, ocfp, resolute, resolute with ocfp and cluster, and resolute with route-registrar environments, plus both resolute refusals. `spec/hooks/pre-deploy.t` covers the merged-manifest check.
+- The API certificate names every static IP the blueprint assigns, from `params.ips` or the ocfp subnets, as well as `rustfs_domain` and `127.0.0.1`, so cluster peers pass the TLS handshake. The blueprint writes the addresses to `meta.api_cert_ips`, and `kit.yml` names up to 16 of them.
+
+- The blueprint refuses a cluster that has neither `params.ips` nor the `ocfp` feature, because Genesis generates the API certificate before BOSH assigns addresses from the cloud config. It also refuses a `params.ips` entry that is not a single IPv4 or IPv6 address, a `params.ips` value that is not a list, and more than 16 addresses.
+
+- The manifest sets `features.use_dns_addresses: false`, so BOSH links hand peers the IP addresses that the API certificate names.
+
+- A Go spec suite under `spec/` covers the base, single address, cluster with `params.ips`, ocfp, resolute, resolute with ocfp and cluster, and resolute with route-registrar environments, plus both resolute refusals and the four cluster address refusals. `spec/api_cert_test.go` generates the API certificate against a vault of its own, checks that it names every static IP, and checks that `check-secrets` and `rotate-secrets certs/api` bring it up to date after `params.ips` grows. `spec/hooks/pre-deploy.t` covers the merged-manifest check, and `spec/hooks/post-deploy.t` covers the health probe.
 
 ### Changed
 
@@ -32,11 +38,15 @@
 
 - The kit requires the cloud config for the blueprint, manifest, and check hooks, since the manifest takes static IPs from the cloud config network.
 
-- The README and MANUAL describe RustFS 1.0.3, the resolute feature, the corrected defaults, and the TLS requirements of a cluster.
+- The post-deploy hook probes `/health/ready` on every RustFS instance over https at `127.0.0.1`, and it verifies the certificate against the kit CA on the node. It used to request `/health` over plain http, which a node that serves https only refuses, and `/health` answers even when a cluster has no quorum. When the CA cannot be read or does not verify the certificate, the hook probes again without verification and says so. Every probe result is a warning, never a failure.
+
+- The post-deploy hook reads the instance list from BOSH, and it falls back to the exodus `instances` count, which the manifest now exports. It reads the exodus URLs through `exodus_lookup` and runs `bosh ssh` through the environment's BOSH connection, where it used to call `safe` and a bare `bosh -e` itself. It skips its checks when the deploy return code is missing or not zero.
+
+- The README and MANUAL describe RustFS 1.0.3, the resolute feature, the corrected defaults, the TLS requirements of a cluster, and how to renew the API certificate after the static IPs change.
 
 ### Known limitations
 
-- A cluster fails the TLS handshake between peers, because the API certificate names only `rustfs_domain` and `127.0.0.1`, and peers dial each other by IP address. Single-node deployments are not affected.
+- A change to the static IPs needs `genesis rotate-secrets certs/api` before the deploy, because `genesis deploy` does not renew a certificate whose names no longer match. `check-secrets` reports each missing address.
 
 ## 0.0.1 (2026-05-20) — initial pre-release scaffold
 

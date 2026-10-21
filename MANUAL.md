@@ -36,9 +36,7 @@ RustFS exposes two ports on each node:
 
 - Port 9001 serves the web console under `/rustfs/console/`.
 
-In cluster mode (instances > 1), BOSH links wire peer discovery automatically.
-Each node receives the full list of peer addresses at deploy time. The kit does
-not require explicit peer IP lists in the environment file.
+In cluster mode (instances > 1), BOSH links wire peer discovery automatically, and each node receives the full list of peer addresses at deploy time. The API certificate must name each of those addresses, so a cluster needs `params.ips` to list every node's static IP, or the `ocfp` feature to supply them. The [TLS and Clusters](#tls-and-clusters) section explains why.
 
 ## Required Config
 
@@ -62,9 +60,7 @@ No operator-supplied config files are required. All parameters have defaults.
   your cloud config. Defaults to `default`. Object storage requires
   substantial disk; provision accordingly.
 
-- `ips` — Explicit list of static IP addresses to assign to instances. When
-  set, the number of instances is derived from the length of this list.
-  When not set, `instances` controls the count, and the manifest takes the first static IPs in the network's static range.
+- `ips` — Explicit list of static IP addresses to assign to instances. When set, the number of instances is derived from the length of this list, and the API certificate names every address in it. Each entry must be a single IPv4 or IPv6 address, not a range, and the list can hold at most 16 addresses. When not set, `instances` controls the count, and the manifest takes the first static IP in the network's static range. That fallback serves a single node only, because the blueprint refuses a cluster without this list unless the `ocfp` feature supplies the addresses.
 
 - `availability_zones` — BOSH AZs to spread instances across. The chosen
   network must have subnets in each listed zone. Defaults to `[z1, z2, z3]`.
@@ -152,7 +148,7 @@ Enables OCFP-managed infrastructure naming conventions. When active:
 
 ### cluster
 
-Deploys three nodes by default, or `params.instances` nodes, and takes their addresses from the network's static range unless `params.ips` or the `ocfp` feature supplies them. The static IP overlay merges after the cluster overlay, so `params.ips` and the ocfp addresses still win. A TLS cluster needs every peer's IP address in the API certificate, as the [TLS and Clusters](#tls-and-clusters) section explains.
+Deploys three nodes by default, or one node per address in `params.ips`. The addresses must come from `params.ips` or from the `ocfp` feature, because the API certificate names every peer's IP address and Genesis generates it before BOSH assigns addresses from the cloud config. The blueprint refuses a cluster that has neither, and the [TLS and Clusters](#tls-and-clusters) section explains why.
 
 ### resolute
 
@@ -237,11 +233,15 @@ vault setup is required.
 
 ### Scaling
 
-Change `params.instances` in your environment file and redeploy:
+A cluster takes its node count from `params.ips`, so we add or remove addresses there. Under the `ocfp` feature the addresses come from the `rustfs_ip` reservation of each ocfp subnet, one node per subnet, and `params.ocfp_instances` can deploy fewer nodes than there are subnets. Every change to the addresses changes the names the API certificate needs, so we renew that certificate before the deploy:
 
 ```bash
+genesis my-rustfs check-secrets
+genesis my-rustfs rotate-secrets certs/api
 genesis deploy my-rustfs
 ```
+
+`check-secrets` warns about the certificate and lists each address it is missing. `genesis deploy` does not renew the certificate on its own, and a node whose certificate lacks a peer's address cannot join that peer.
 
 When scaling from 1 to N nodes, the cluster enters distributed mode and BOSH links wire peer discovery automatically. Data is not migrated between modes, so plan the topology before the first deploy.
 
@@ -253,6 +253,15 @@ Genesis manages certificate rotation. Renew with:
 genesis rotate-secrets my-rustfs
 genesis deploy my-rustfs
 ```
+
+To renew only the API certificate, for example after the static IPs change, name it on the command line:
+
+```bash
+genesis my-rustfs rotate-secrets certs/api
+genesis deploy my-rustfs
+```
+
+The renewed certificate keeps its key and is signed by the same CA, so peers that still hold the old certificate keep trusting the new one while the deploy rolls through the nodes.
 
 ### Credential Rotation
 
@@ -288,7 +297,7 @@ Genesis manages three certificates via the `certificates` block in `kit.yml`:
 |-------------|-----------|---------|---------|
 | CA | `certs/ca` | 10 years | Root CA that signs the peer and API certificates, and that peers trust |
 | Peer | `certs/peer` | 10 years | Still rendered to the job, but RustFS 1.0 does not read it |
-| API | `certs/api` | 2 years | S3 API and internode TLS |
+| API | `certs/api` | 2 years | S3 API and internode TLS. It names `rustfs_domain`, `127.0.0.1`, and every node's static IP |
 
 The CA certificate is also exported to exodus for consumer kits.
 
@@ -296,7 +305,25 @@ The CA certificate is also exported to exodus for consumer kits.
 
 The kit always sets the API certificate and key, so every node serves https only on port 9000 and refuses plaintext requests. RustFS serves internode RPC on that same port, and each node dials its peers at their IP addresses over https and verifies them against the kit's CA.
 
-That verification means every peer's API certificate must name the peer's own IP address. The kit's API certificate names only `rustfs_domain` and `127.0.0.1`, so a cluster built with it fails the TLS handshake between peers and never reaches quorum, and the deploy fails in post-start. A single node is not affected, because it never dials a peer. Until the kit generates certificates that carry the peer addresses, a cluster needs an API certificate whose subject alternative names include every node's static IP, stored at `certs/api` in the environment's vault path.
+That verification means the API certificate must name every peer's IP address. The kit generates one certificate that all nodes share, and it names `rustfs_domain`, `127.0.0.1`, and every static IP that the blueprint assigns. The blueprint knows those addresses only when `params.ips` lists them or the `ocfp` feature reads them from the ocfp subnets. Genesis generates the certificate during `add-secrets`, before BOSH assigns any address from the cloud config's static range, so a cluster that relies on that range would get a certificate without its peers. The blueprint refuses that cluster and asks for `params.ips`. A single node never dials a peer, so it may still take its address from the static range.
+
+The certificate holds at most 16 static IP addresses, and the blueprint refuses a longer list. Each entry in `params.ips` must be a single IPv4 or IPv6 address, and the blueprint refuses a BOSH range such as `10.0.0.10 - 10.0.0.12`.
+
+The manifest sets the deployment feature `use_dns_addresses: false`, so BOSH links hand out IP addresses even on a director that turns DNS addresses on. Peers then dial the same addresses that the certificate names.
+
+When the static IPs change, the certificate needs the new names before the deploy. `genesis check-secrets` warns about the certificate and lists each missing address, and `genesis rotate-secrets certs/api` renews it, as [Scaling](#scaling) describes.
+
+After a successful deploy, the post-deploy hook probes `/health/ready` on every node over https at `127.0.0.1`. It verifies the certificate against the kit CA on the node, and it reports one of these results for each node:
+
+- The node is ready, and its certificate verified against the kit CA.
+
+- The node is ready, but its certificate did not verify against the kit CA. We rotate `certs/api` and redeploy.
+
+- The node is ready, but the kit CA could not be read on the node, so the certificate was not verified.
+
+- The probe failed, which usually means the cluster has no quorum yet, often because peers refuse each other's certificates.
+
+Each result other than the first is a warning. The hook also warns when it cannot run the probe on a node, and none of these warnings fails the deploy.
 
 ## Resolute Stemcells
 
@@ -337,6 +364,7 @@ Downstream kits and operators can read the following keys from RustFS exodus:
 | Key | Description |
 |-----|-------------|
 | `ips` | Comma-separated list of RustFS instance IPs |
+| `instances` | Number of RustFS instances |
 | `domain` | Internal BOSH DNS domain |
 | `s3_api_url` | HTTPS URL to primary node S3 API (port 9000) |
 | `s3_console_url` | HTTPS URL to primary node web console (port 9001) |
