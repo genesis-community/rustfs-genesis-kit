@@ -259,10 +259,12 @@ sub _check_node_count {
     "cannot be done in place.  A single node formats its drive as " .
     "single-node single-drive, and RustFS refuses to start with the error " .
     "\"unsupported pool expansion\" in " .
-    "/var/vcap/sys/log/rustfs-server/rustfs-server.stderr.log.  To move to " .
-    "a cluster, copy the data out with an S3 client, delete the deployment, " .
-    "set #c{params.ips} to the addresses of the new nodes, run " .
-    "#G{genesis %s rotate-secrets certs/api}, deploy, and copy the data back.",
+    "/var/vcap/sys/log/rustfs-server/rustfs-server.stderr.log.  RustFS " .
+    "supports one way to get there, which is a new deployment at the new " .
+    "size and a copy of the data through the S3 API with #G{mc mirror}.  " .
+    "The section \"Changing the Node Count\" in the kit manual " .
+    "(#G{genesis %s kit-manual}) gives the commands, both for a new cluster " .
+    "beside this node and for rebuilding this environment in place.",
     $new, $env->name
   ) if $old == 1 && $new > 1;
 
@@ -281,11 +283,13 @@ sub _check_node_count {
     "This deploy would change the RustFS node count from %d (from %s) to " .
     "%d.  RustFS fixes its erasure layout when the cluster first starts, so " .
     "the nodes would find drives that do not match the new layout, refuse " .
-    "to start, and stop serving data.  To resize, copy the data out with an " .
-    "S3 client, delete the deployment, deploy the new size, and copy the " .
-    "data back.  Set #c{params.allow_node_count_change} to true only when " .
-    "the drives no longer hold data that you need.",
-    $old, $source, $new
+    "to start, and stop serving data.  To resize, we build a new deployment " .
+    "at the new size and copy the data across with #G{mc mirror}, as the " .
+    "section \"Changing the Node Count\" in the kit manual " .
+    "(#G{genesis %s kit-manual}) describes.  Set " .
+    "#c{params.allow_node_count_change} to true only when the drives no " .
+    "longer hold data that we need.",
+    $old, $source, $new, $env->name
   );
 }
 # }}}

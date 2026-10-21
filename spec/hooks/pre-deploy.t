@@ -234,6 +234,8 @@ ok(!eval { hook_with(bosh => bosh_rows(@three))->_check_node_count(group_of(4));
 	'growing a cluster is refused');
 like(flat($@), qr/from 3 \(from BOSH\) to 4/, 'the refusal names both counts and the source');
 like(flat($@), qr/allow_node_count_change/, 'the refusal names the override');
+like(flat($@), qr/"Changing the Node Count" in the kit manual \(genesis spec kit-manual\)/, 'the refusal points to the manual section');
+like(flat($@), qr/mc mirror/, 'the refusal names the copy tool');
 
 ok(!eval { hook_with(bosh => bosh_rows(@three))->_check_node_count(group_of(1)); 1 },
 	'shrinking a cluster to one node is refused');
@@ -244,7 +246,8 @@ ok(eval { hook_with(bosh => bosh_rows(@three), params => {'params.allow_node_cou
 ok(!eval { hook_with(bosh => bosh_rows('rustfs/a'), params => {'params.allow_node_count_change' => 1})->_check_node_count(group_of(3)); 1 },
 	'growing a single node is refused even with the override');
 like(flat($@), qr/unsupported pool expansion/, 'the refusal quotes the RustFS error');
-like(flat($@), qr/rotate-secrets certs\/api/, 'the refusal gives the migration steps');
+like(flat($@), qr/new deployment at the new size .* mc mirror/, 'the refusal names the supported migration');
+like(flat($@), qr/"Changing the Node Count" in the kit manual \(genesis spec kit-manual\)/, 'the refusal points to the manual section');
 
 ok(eval { hook_with(bosh => StubBosh->new(rc => 1, err => "Deployment 'spec-rustfs' doesn't exist"), exodus => {instances => 1})->_check_node_count(group_of(3)); 1 },
 	'a first deploy passes, even when stale exodus data remains') or diag($@);

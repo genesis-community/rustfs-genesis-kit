@@ -33,10 +33,10 @@ sub perform {
 
   my $env        = $self->env;
   my $env_name   = $env->name;
-  my $vault_path = $env->vault_path_prefix;
+  my $target     = $env->vault->name;
 
-  my $access_key_path = "$vault_path/credentials:access_key";
-  my $secret_key_path = "$vault_path/credentials:secret_key";
+  my $access_key_path = $env->secrets_base . 'credentials:access_key';
+  my $secret_key_path = $env->secrets_base . 'credentials:secret_key';
 
   info("");
   info("#Y{WARNING}: This will rotate RustFS credentials and trigger a redeploy.");
@@ -46,8 +46,8 @@ sub perform {
   info("  #C{%s}", $secret_key_path);
   info("");
   info("Equivalent safe commands:");
-  info("  safe -T %s gen %s", $env_name, $access_key_path);
-  info("  safe -T %s gen %s", $env_name, $secret_key_path);
+  info("  safe -T %s gen -l 20 %s", $target, $access_key_path);
+  info("  safe -T %s gen -l 40 %s", $target, $secret_key_path);
   info("");
 
   # Prompt operator - abort if not confirmed
@@ -62,7 +62,7 @@ sub perform {
   info("Rotating #C{access_key}...");
   my ($out, $rc) = run(
     { stderr => 1 },
-    'safe', '-T', $env_name, 'gen', '-l', '20', "$access_key_path"
+    'safe', '-T', $target, 'gen', '-l', '20', "$access_key_path"
   );
   bail("Failed to rotate access_key (exit %d): %s", $rc, $out) unless $rc == 0;
   info("  #g{[ok]} access_key rotated");
@@ -70,7 +70,7 @@ sub perform {
   info("Rotating #C{secret_key}...");
   ($out, $rc) = run(
     { stderr => 1 },
-    'safe', '-T', $env_name, 'gen', '-l', '40', "$secret_key_path"
+    'safe', '-T', $target, 'gen', '-l', '40', "$secret_key_path"
   );
   bail("Failed to rotate secret_key (exit %d): %s", $rc, $out) unless $rc == 0;
   info("  #g{[ok]} secret_key rotated");
