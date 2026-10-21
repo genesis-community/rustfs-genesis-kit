@@ -367,7 +367,7 @@ This path keeps the old deployment serving while the copy runs. It needs address
 
 5. Point the clients at the new cluster. It has its own addresses, CA, and credentials, which its exodus data publishes as `s3_api_url`, `ca`, and `access_key`, and its secret key is under its own vault path. Anything that reads the old environment's exodus data, such as the CF router CA from the [route-registrar](#route-registrar) steps, changes to the new environment name and deploys again.
 
-6. When nothing uses the old deployment any more, delete it with `genesis my-rustfs bosh delete-deployment`, and remove its alias with `mc alias remove rustfs-my-rustfs`.
+6. When nothing uses the old deployment any more, stop it with `genesis my-rustfs bosh stop --skip-drain rustfs`, delete it with `genesis my-rustfs bosh delete-deployment`, and remove its alias with `mc alias remove rustfs-my-rustfs`. A stopped node's drain returns at once, while a running cluster's drain waits for peers that the delete is already stopping.
 
 #### Rebuilding the same environment in place
 
@@ -384,9 +384,10 @@ This path keeps the environment name, the credentials, and the CA, so clients ne
 
     We check that the staging directory holds every bucket, for example with `mc diff rustfs-my-rustfs/<bucket> /data/rustfs-stage/<bucket>`, before we go on.
 
-2. Delete the deployment:
+2. Stop the deployment, so that no drain waits for a peer, and delete it:
 
     ```bash
+    genesis my-rustfs bosh stop --skip-drain rustfs
     genesis my-rustfs bosh delete-deployment
     ```
 
