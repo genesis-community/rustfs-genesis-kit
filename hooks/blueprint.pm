@@ -177,9 +177,6 @@ EOF
 
 		} elsif ($feature eq 'cluster') {
 			$self->add_files('manifests/cluster.yml');
-			unless ($added_releases{'bosh-dns-aliases'}++) {
-				$self->add_files('manifests/releases/bosh-dns-aliases.yml');
-			}
 
 		} elsif ($feature =~ /^scale-(small|medium|large)$/) {
 			$self->add_files("manifests/scale-${1}.yml");
