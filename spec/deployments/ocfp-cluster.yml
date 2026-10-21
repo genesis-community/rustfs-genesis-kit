@@ -1,0 +1,15 @@
+---
+kit:
+  name:    dev
+  version: latest
+  features:
+  - ocfp
+  - cluster
+
+genesis:
+  env:      ocfp-cluster
+  bosh_env: proto-main
+  entomb:   false
+
+params:
+  ocfp_subnet_prefix: ocfp

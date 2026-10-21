@@ -1,0 +1,15 @@
+---
+kit:
+  name:    dev
+  version: latest
+  features:
+  - ocfp
+
+genesis:
+  env:      ocfp-instances
+  bosh_env: proto-main
+  entomb:   false
+
+params:
+  ocfp_subnet_prefix: ocfp
+  instances: 3

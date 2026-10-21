@@ -9,4 +9,4 @@ genesis:
   entomb:   false
 
 params:
-  instances: 2
+  instances: 3

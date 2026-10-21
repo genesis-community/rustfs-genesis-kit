@@ -89,6 +89,26 @@ var _ = Describe("RustFS Kit", func() {
 			},
 		})
 		Test(Environment{
+			Name:        "two-ips",
+			CloudConfig: "aws",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("refuses to deploy exactly two nodes"),
+				GenesisCheck:      refused("refuses to deploy exactly two nodes"),
+				GenesisManifest:   refused("refuses to deploy exactly two nodes"),
+			},
+		})
+		Test(Environment{
+			Name:        "ips-instances-mismatch",
+			CloudConfig: "aws",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("lists 3 addresses, but"),
+				GenesisCheck:      refused("lists 3 addresses, but"),
+				GenesisManifest:   refused("lists 3 addresses, but"),
+			},
+		})
+		Test(Environment{
 			Name:        "cluster-ip-range",
 			CloudConfig: "aws",
 			CPI:         "aws",
@@ -110,11 +130,50 @@ var _ = Describe("RustFS Kit", func() {
 		})
 	})
 
+	// Under ocfp the rustfs_ip reservations decide the addresses, and
+	// params.ocfp_instances decides how many to use.  The blueprint refuses
+	// params.ips and params.instances there, because the ocfp fragment would
+	// silently replace them.
 	Describe("ocfp", func() {
 		Test(Environment{
 			Name:        "ocfp-mgmt",
 			CloudConfig: "aws-ocfp",
 			CPI:         "aws",
+		})
+		Test(Environment{
+			Name:        "ocfp-cluster",
+			CloudConfig: "aws-ocfp-cluster",
+			CPI:         "aws",
+		})
+		Test(Environment{
+			Name:        "ocfp-ips",
+			CloudConfig: "aws-ocfp-ips",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("reservations, so it ignores params.ips."),
+				GenesisCheck:      refused("reservations, so it ignores params.ips."),
+				GenesisManifest:   refused("reservations, so it ignores params.ips."),
+			},
+		})
+		Test(Environment{
+			Name:        "ocfp-instances",
+			CloudConfig: "aws-ocfp-instances",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("reservations, so it ignores params.instances."),
+				GenesisCheck:      refused("reservations, so it ignores params.instances."),
+				GenesisManifest:   refused("reservations, so it ignores params.instances."),
+			},
+		})
+		Test(Environment{
+			Name:        "ocfp-pair",
+			CloudConfig: "aws-ocfp-pair",
+			CPI:         "aws",
+			OutputMatchers: OutputMatchers{
+				GenesisAddSecrets: refused("refuses to deploy exactly two nodes"),
+				GenesisCheck:      refused("refuses to deploy exactly two nodes"),
+				GenesisManifest:   refused("refuses to deploy exactly two nodes"),
+			},
 		})
 	})
 

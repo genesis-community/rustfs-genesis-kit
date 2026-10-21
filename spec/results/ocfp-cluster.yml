@@ -1,0 +1,122 @@
+exodus:
+  access_key: <!{meta.vault}/credentials:access_key!>
+  bosh: proto-main
+  ca: <!{meta.vault}/certs/ca:certificate!>
+  cluster: true
+  cluster_size: 3
+  domain: rustfs.bosh
+  features: ocfp,cluster
+  iaas: aws
+  instances: 3
+  ips: 10.0.2.190,10.0.3.190,10.0.4.190
+  is_director: false
+  s3_api_url: https://10.0.2.190:9000
+  s3_console_url: https://10.0.2.190:9001
+  scale: null
+  services: s3
+  use_create_env: false
+features:
+  use_dns_addresses: false
+instance_groups:
+- azs:
+  - z1
+  - z2
+  - z3
+  env:
+    persistent_disk_fs: xfs
+  instances: 3
+  jobs:
+  - consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    name: rustfs-server
+    properties:
+      rustfs:
+        access_key: <!{meta.vault}/credentials:access_key!>
+        console_enable: true
+        console_port: 9001
+        health_enable: true
+        internode:
+          connect_timeout_secs: 3
+          rpc_timeout_secs: 10
+          tcp_keepalive_secs: 10
+        log_level: info
+        peer:
+          tls:
+            ca: <!{meta.vault}/certs/ca:certificate!>
+            certificate: <!{meta.vault}/certs/peer:certificate!>
+            key: <!{meta.vault}/certs/peer:key!>
+        persistent_disk_path: /var/vcap/store/rustfs-server
+        port: 9000
+        region: us-east-1
+        secret_key: <!{meta.vault}/credentials:secret_key!>
+        server_domains: ""
+        tls:
+          ca: <!{meta.vault}/certs/ca:certificate!>
+          certificate: <!{meta.vault}/certs/api:certificate!>
+          key: <!{meta.vault}/certs/api:key!>
+        volumes_per_node: 1
+    provides:
+      rustfs-peer:
+        as: rustfs-peer
+    release: rustfs
+  - name: bpm
+    release: bpm
+  name: rustfs
+  networks:
+  - name: ocfp-cluster.rustfs.net-rustfs
+    static_ips:
+    - 10.0.2.190
+    - 10.0.3.190
+    - 10.0.4.190
+  persistent_disk_type: ocfp-cluster.rustfs.disk-rustfs
+  stemcell: default
+  vm_type: ocfp-cluster.rustfs.vm-rustfs
+- azs:
+  - z1
+  - z2
+  - z3
+  instances: 1
+  jobs:
+  - consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    name: smoke-tests
+    properties:
+      rustfs:
+        access_key: <!{meta.vault}/credentials:access_key!>
+        port: 9000
+        region: us-east-1
+        secret_key: <!{meta.vault}/credentials:secret_key!>
+        tls:
+          ca: <!{meta.vault}/certs/ca:certificate!>
+          certificate: <!{meta.vault}/certs/api:certificate!>
+      smoke_tests:
+        timeout_secs: 30
+    release: rustfs
+  lifecycle: errand
+  name: smoke-tests
+  networks:
+  - name: ocfp-cluster.rustfs.net-rustfs
+    static_ips:
+    - 10.0.2.191
+  stemcell: default
+  vm_type: ocfp-cluster.rustfs.vm-rustfs
+name: ocfp-cluster-rustfs
+releases:
+- name: rustfs
+  version: 0.2.0+dev.2
+- name: bpm
+  sha1: sha256:51f2eab4b59939db733beb8f7905e461a732cc29d85e54f151f576cd5bf0c414
+  url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.22
+  version: 1.4.22
+stemcells:
+- alias: default
+  os: ubuntu-noble
+  version: latest
+update:
+  canaries: 1
+  canary_watch_time: 30000-600000
+  max_in_flight: 1
+  serial: true
+  update_watch_time: 30000-600000

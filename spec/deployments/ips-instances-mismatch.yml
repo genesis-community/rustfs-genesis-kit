@@ -1,0 +1,17 @@
+---
+kit:
+  name:    dev
+  version: latest
+  features:
+  - cluster
+
+genesis:
+  env:      ips-instances-mismatch
+  entomb:   false
+
+params:
+  instances: 5
+  ips:
+  - 10.99.1.30
+  - 10.99.2.30
+  - 10.99.3.30

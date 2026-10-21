@@ -85,6 +85,7 @@ instance_groups:
         region: us-east-1
         secret_key: <!{meta.vault}/credentials:secret_key!>
         tls:
+          ca: <!{meta.vault}/certs/ca:certificate!>
           certificate: <!{meta.vault}/certs/api:certificate!>
       smoke_tests:
         timeout_secs: 30
@@ -98,7 +99,7 @@ instance_groups:
 name: single-ip-rustfs
 releases:
 - name: rustfs
-  version: 0.2.0+dev.1
+  version: 0.2.0+dev.2
 - name: bpm
   sha1: sha256:51f2eab4b59939db733beb8f7905e461a732cc29d85e54f151f576cd5bf0c414
   url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.22

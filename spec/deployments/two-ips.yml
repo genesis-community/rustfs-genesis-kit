@@ -1,0 +1,15 @@
+---
+kit:
+  name:    dev
+  version: latest
+  features:
+  - cluster
+
+genesis:
+  env:      two-ips
+  entomb:   false
+
+params:
+  ips:
+  - 10.99.1.30
+  - 10.99.2.30
