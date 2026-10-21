@@ -22,7 +22,9 @@ supports:
 - stackit
 
 required_configs:
-  blueprint: []
+  # The manifest takes static IPs from the cloud config network, and the
+  # check hook confirms the vm type, network, and disk type it names.
+  cloud: [ blueprint, manifest, check ]
 
 credentials:
   base:

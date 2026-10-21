@@ -1,0 +1,122 @@
+exodus:
+  access_key: <!{meta.vault}/credentials:access_key!>
+  bosh: proto-main
+  ca: <!{meta.vault}/certs/ca:certificate!>
+  cluster: true
+  cluster_size: 3
+  domain: rustfs.bosh
+  features: ocfp,cluster,resolute
+  iaas: aws
+  ips: 10.0.2.190,10.0.3.190,10.0.4.190
+  is_director: false
+  s3_api_url: https://10.0.2.190:9000
+  s3_console_url: https://10.0.2.190:9001
+  scale: null
+  services: s3
+  use_create_env: false
+instance_groups:
+- azs:
+  - z1
+  - z2
+  - z3
+  env:
+    persistent_disk_fs: xfs
+  instances: 3
+  jobs:
+  - consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    name: rustfs-server
+    properties:
+      rustfs:
+        access_key: <!{meta.vault}/credentials:access_key!>
+        console_enable: true
+        console_port: 9001
+        health_enable: true
+        internode:
+          connect_timeout_secs: 3
+          rpc_timeout_secs: 10
+          tcp_keepalive_secs: 10
+        log_level: info
+        peer:
+          tls:
+            ca: <!{meta.vault}/certs/ca:certificate!>
+            certificate: <!{meta.vault}/certs/peer:certificate!>
+            key: <!{meta.vault}/certs/peer:key!>
+        persistent_disk_path: /var/vcap/store/rustfs-server
+        port: 9000
+        region: us-east-1
+        secret_key: <!{meta.vault}/credentials:secret_key!>
+        server_domains: ""
+        tls:
+          ca: <!{meta.vault}/certs/ca:certificate!>
+          certificate: <!{meta.vault}/certs/api:certificate!>
+          key: <!{meta.vault}/certs/api:key!>
+        volumes_per_node: 1
+    provides:
+      rustfs-peer:
+        as: rustfs-peer
+    release: rustfs
+  - name: bpm
+    release: bpm
+  name: rustfs
+  networks:
+  - name: resolute-mgmt.rustfs.net-rustfs
+    static_ips:
+    - 10.0.2.190
+    - 10.0.3.190
+    - 10.0.4.190
+  persistent_disk_type: resolute-mgmt.rustfs.disk-rustfs
+  stemcell: default
+  vm_type: resolute-mgmt.rustfs.vm-rustfs
+- azs:
+  - z1
+  - z2
+  - z3
+  instances: 1
+  jobs:
+  - consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    name: smoke-tests
+    properties:
+      rustfs:
+        access_key: <!{meta.vault}/credentials:access_key!>
+        port: 9000
+        region: us-east-1
+        secret_key: <!{meta.vault}/credentials:secret_key!>
+        tls:
+          certificate: <!{meta.vault}/certs/api:certificate!>
+      smoke_tests:
+        timeout_secs: 30
+    release: rustfs
+  lifecycle: errand
+  name: smoke-tests
+  networks:
+  - name: resolute-mgmt.rustfs.net-rustfs
+    static_ips:
+    - 10.0.2.191
+  stemcell: default
+  vm_type: resolute-mgmt.rustfs.vm-rustfs
+name: resolute-mgmt-rustfs
+releases:
+- name: rustfs
+  version: 0.2.0+dev.1
+- name: bpm
+  sha1: sha256:7b445508d63d2171d892ba33f836087e1e519b9782f44c5fa5290323616ca8e6
+  url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.41
+  version: 1.4.41
+- name: bosh-dns-aliases
+  sha1: sha256:27ef8965dc4f1633479613743e782566e3b7fba5d28dad3d50488c2919eac0da
+  url: https://bosh.io/d/github.com/cloudfoundry/bosh-dns-aliases-release?v=0.0.4
+  version: 0.0.4
+stemcells:
+- alias: default
+  os: ubuntu-resolute
+  version: "0.184"
+update:
+  canaries: 1
+  canary_watch_time: 30000-600000
+  max_in_flight: 1
+  serial: true
+  update_watch_time: 30000-600000

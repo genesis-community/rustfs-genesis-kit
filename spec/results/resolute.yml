@@ -1,0 +1,113 @@
+exodus:
+  access_key: <!{meta.vault}/credentials:access_key!>
+  bosh: resolute
+  ca: <!{meta.vault}/certs/ca:certificate!>
+  domain: rustfs.bosh
+  features: resolute
+  iaas: null
+  ips:
+  - 10.99.1.16
+  is_director: false
+  s3_api_url: https://10.99.1.16:9000
+  s3_console_url: https://10.99.1.16:9001
+  scale: null
+  services: s3
+  use_create_env: false
+instance_groups:
+- azs:
+  - z1
+  - z2
+  - z3
+  env:
+    persistent_disk_fs: xfs
+  instances: 1
+  jobs:
+  - consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    name: rustfs-server
+    properties:
+      rustfs:
+        access_key: <!{meta.vault}/credentials:access_key!>
+        console_enable: true
+        console_port: 9001
+        health_enable: true
+        internode:
+          connect_timeout_secs: 3
+          rpc_timeout_secs: 10
+          tcp_keepalive_secs: 10
+        log_level: info
+        peer:
+          tls:
+            ca: <!{meta.vault}/certs/ca:certificate!>
+            certificate: <!{meta.vault}/certs/peer:certificate!>
+            key: <!{meta.vault}/certs/peer:key!>
+        persistent_disk_path: /var/vcap/store/rustfs-server
+        port: 9000
+        region: us-east-1
+        secret_key: <!{meta.vault}/credentials:secret_key!>
+        server_domains: ""
+        tls:
+          ca: <!{meta.vault}/certs/ca:certificate!>
+          certificate: <!{meta.vault}/certs/api:certificate!>
+          key: <!{meta.vault}/certs/api:key!>
+        volumes_per_node: 1
+    provides:
+      rustfs-peer:
+        as: rustfs-peer
+    release: rustfs
+  - name: bpm
+    release: bpm
+  name: rustfs
+  networks:
+  - name: rustfs
+    static_ips:
+    - 10.99.1.16
+  persistent_disk_type: default
+  stemcell: default
+  vm_type: default
+- azs:
+  - z1
+  - z2
+  - z3
+  instances: 1
+  jobs:
+  - consumes:
+      rustfs-peer:
+        from: rustfs-peer
+    name: smoke-tests
+    properties:
+      rustfs:
+        access_key: <!{meta.vault}/credentials:access_key!>
+        port: 9000
+        region: us-east-1
+        secret_key: <!{meta.vault}/credentials:secret_key!>
+        tls:
+          certificate: <!{meta.vault}/certs/api:certificate!>
+      smoke_tests:
+        timeout_secs: 30
+    release: rustfs
+  lifecycle: errand
+  name: smoke-tests
+  networks:
+  - name: rustfs
+  stemcell: default
+  vm_type: default
+name: resolute-rustfs
+releases:
+- name: rustfs
+  version: 0.2.0+dev.1
+- name: bpm
+  sha1: sha256:7b445508d63d2171d892ba33f836087e1e519b9782f44c5fa5290323616ca8e6
+  url: https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.41
+  version: 1.4.41
+stemcells:
+- alias: default
+  os: ubuntu-resolute
+  version: latest
+update:
+  canaries: 1
+  canary_watch_time: 30000-600000
+  max_in_flight: 1
+  serial: true
+  update_watch_time: 30000-600000

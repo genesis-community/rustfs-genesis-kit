@@ -1,13 +1,13 @@
-# The rustfs BOSH release is not yet published to a public blobstore. Build it
-# from the source repo (src/releases/rustfs) and upload to the director before
-# deploying:
+# rustfs 0.2.0+dev.1 is a dev release of RustFS 1.0.3 with resolute support.
+# It has no public tarball yet, so build it from the release repository
+# (src/releases/rustfs) and upload it to the director before deploying:
 #
 #   cd src/releases/rustfs
-#   bosh create-release --force --name rustfs --version 0.1.7 --tarball=/tmp/rustfs-0.1.7.tgz
-#   genesis <env> bosh upload-release /tmp/rustfs-0.1.7.tgz
+#   bosh create-release --name rustfs --version 0.2.0+dev.1 --tarball=/tmp/rustfs-0.2.0+dev.1.tgz
+#   genesis <env> bosh upload-release /tmp/rustfs-0.2.0+dev.1.tgz
 #
-# Once a public release is published, add `url:` and `sha1:` here so Genesis can
-# upload it automatically.
+# When the 0.2.0 final is published, its version, url, and sha1 replace this
+# dev pin, so that Genesis can upload the release itself.
 releases:
 - name:    rustfs
-  version: 0.1.7
+  version: 0.2.0+dev.1

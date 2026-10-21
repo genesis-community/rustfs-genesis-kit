@@ -4,17 +4,25 @@ The **RustFS Genesis Kit** deploys a RustFS cluster using BOSH-link peer
 discovery and BPM process management. RustFS is an S3-compatible object
 storage server written in Rust that implements the AWS S3 API.
 
-> ⚠ **PRE-RELEASE WARNING** ⚠
->
-> This kit packages RustFS 1.0.0-beta.3. RustFS distributed cluster mode is
-> explicitly marked "Under Testing" by the RustFS project. Do not deploy in
-> production without thorough validation. API and configuration may change
-> between beta versions. Single-node mode (`instances: 1`) is more stable.
->
-> See: https://github.com/rustfs/rustfs
+This kit deploys RustFS 1.0.3 through the rustfs BOSH release 0.2.0+dev.1. Upstream lists distributed mode as available from RustFS 1.0 onwards, but we still recommend testing node failure, restart, and rejoin against your own workload before a cluster holds important data. A single node has no redundancy, so keep an external backup of it.
 
-Peer discovery is automatic via BOSH links. All inter-node communication is
-secured with mTLS using the cluster peer certificate.
+Peer discovery is automatic through BOSH links. Every node serves the S3 API and internode traffic over TLS on port 9000, and peers verify each other with the kit's CA. The [TLS and Clusters](#tls-and-clusters) section explains what a TLS cluster needs from its certificates.
+
+## Requirements
+
+- **BOSH director**, which needs the following releases. The kit pins every release it uses rather than taking `latest`.
+
+  - `rustfs` 0.2.0+dev.1. This dev release has no public tarball, so we build it from the release repository and upload it with `genesis <env> bosh upload-release` before the deploy.
+
+  - `bpm` 1.4.22 on Noble stemcells, or 1.4.41 when the `resolute` feature is on. bpm 1.4.31 cannot start jobs on Noble, and bpm releases older than 1.4.41 do not compile on Resolute. Both pins carry a bosh.io URL, so BOSH fetches bpm during the deploy.
+
+  - `routing` 0.343.0 when the `route-registrar` feature is on.
+
+  - `bosh-dns-aliases` 0.0.4 when the `route-registrar` or `cluster` feature is on.
+
+- **Stemcell**, either Ubuntu Noble (24.04) or, when the `resolute` feature is on, Ubuntu Resolute (26.04). We upload it with `bosh upload-stemcell`.
+
+- **Cloud config** with the network, VM type, and disk type the environment names. The `check` hook confirms that each one exists.
 
 ## Version Compatibility
 
@@ -24,8 +32,9 @@ This kit requires Genesis 3.1.0 or higher. It is currently at version 0.1.0.
 
 RustFS exposes two ports on each node:
 
-- Port 9000 — S3-compatible API endpoint
-- Port 9001 — Web console UI
+- Port 9000 serves the S3-compatible API and internode RPC.
+
+- Port 9001 serves the web console under `/rustfs/console/`.
 
 In cluster mode (instances > 1), BOSH links wire peer discovery automatically.
 Each node receives the full list of peer addresses at deploy time. The kit does
@@ -39,13 +48,9 @@ No operator-supplied config files are required. All parameters have defaults.
 
 ### Core
 
-- `instances` — Number of RustFS instances to deploy. Defaults to `3`. Set
-  to `1` for single-node mode. Set to 3 or more for cluster mode. Note that
-  cluster mode is under testing upstream; odd counts provide better quorum
-  behavior.
+- `instances` — Number of RustFS instances to deploy. Defaults to `1`, or to `3` when the `cluster` feature is on. Erasure coding spans nodes, so a cluster needs at least three of them.
 
-- `rustfs_domain` — Domain name used in TLS certificate subject alternative
-  names. Defaults to `rustfs.bosh`.
+- `rustfs_domain` — Domain name in the API certificate's subject alternative names, also exported to exodus as `domain`. Defaults to `rustfs.bosh`.
 
 - `rustfs_network` — BOSH network name to deploy into. This network must
   be defined in your cloud config. Defaults to `rustfs`.
@@ -59,15 +64,12 @@ No operator-supplied config files are required. All parameters have defaults.
 
 - `ips` — Explicit list of static IP addresses to assign to instances. When
   set, the number of instances is derived from the length of this list.
-  When not set, `instances` controls the count and the base manifest uses
-  `static_ips 0 1 2` for the first three IPs in the network range.
+  When not set, `instances` controls the count, and the manifest takes the first static IPs in the network's static range.
 
 - `availability_zones` — BOSH AZs to spread instances across. The chosen
   network must have subnets in each listed zone. Defaults to `[z1, z2, z3]`.
 
-- `stemcell_os` — Stemcell OS to deploy on. Defaults to `ubuntu-noble`
-  (Ubuntu 24.04). RustFS requires io_uring support (kernel ≥ 5.1); do not
-  change this to an older OS.
+- `stemcell_os` — Stemcell OS to deploy on. Defaults to `ubuntu-noble` (Ubuntu 24.04). Leave it unset and enable the `resolute` feature to deploy on Ubuntu Resolute, because the blueprint refuses `ubuntu-resolute` without the feature and refuses any other value with it.
 
 - `stemcell_version` — Specific stemcell version. Defaults to `latest`.
 
@@ -76,18 +78,15 @@ No operator-supplied config files are required. All parameters have defaults.
 - `log_level` — RustFS server log level. Valid values: `trace`, `debug`,
   `info`, `warn`, `error`. Defaults to `info`.
 
-- `rustfs_region` — S3 region string returned in API responses. Defaults to
-  `us-east-1`. Change if clients expect a specific region in responses.
+- `rustfs_region` — S3 region the server reports, for example in `GetBucketLocation`. Defaults to `us-east-1`. RustFS accepts requests signed for any region.
 
-- `rustfs_server_domains` — Space-separated list of domains for virtual-hosted
+- `rustfs_server_domains` — Comma-separated list of domains for virtual-hosted
   style bucket addressing (e.g., `example.com`). Defaults to empty string
   (path-style addressing only).
 
-- `rustfs_disk_path` — Filesystem path for RustFS data volumes on each node.
-  Defaults to `/var/vcap/store/rustfs`.
+- `rustfs_disk_path` — Filesystem path for RustFS data volumes on each node. Defaults to `/var/vcap/store/rustfs-server`.
 
-- `rustfs_volumes_per_node` — Number of sub-directories per node used as
-  erasure coding data drives. Defaults to `4`. Only relevant in cluster mode.
+- `rustfs_volumes_per_node` — Number of data sub-directories per node. Defaults to `1`, and it should stay there. RustFS requires each local data volume to live on its own physical disk, and a BOSH instance has one persistent disk, so a higher value fails at startup.
 
 - `rustfs_port` — S3 API listen port. Defaults to `9000`.
 
@@ -138,8 +137,7 @@ Two routes are registered:
 - `{api_route_prefix}.{system_domain}` → port 9000 (S3 API)
 - `{console_route_prefix}.{system_domain}` → port 9001 (web console)
 
-The `check` hook validates that the CF system domain is present in CF exodus
-before deploy. If not found, a descriptive error is emitted.
+The `check` hook confirms that the CF exodus data holds the system domain, the core network, and the NATS client certificate and key before the deploy, and it names each one that is missing.
 
 ### ocfp
 
@@ -151,6 +149,14 @@ Enables OCFP-managed infrastructure naming conventions. When active:
   configuration to supply static IP addresses and AZs.
 - Requires an OCFP-initialized director with appropriate subnets and cloud
   config.
+
+### cluster
+
+Deploys three nodes by default, or `params.instances` nodes, and takes their addresses from the network's static range unless `params.ips` or the `ocfp` feature supplies them. The static IP overlay merges after the cluster overlay, so `params.ips` and the ocfp addresses still win. A TLS cluster needs every peer's IP address in the API certificate, as the [TLS and Clusters](#tls-and-clusters) section explains.
+
+### resolute
+
+Deploys RustFS on an Ubuntu Resolute (26.04) stemcell. The [Resolute Stemcells](#resolute-stemcells) section covers it in full.
 
 ### scale-small
 
@@ -176,12 +182,19 @@ workloads. Requires a matching VM type in cloud config.
 genesis my-rustfs do smoke
 ```
 
-Runs the `smoke-tests` BOSH errand. The errand exercises:
+Runs the `smoke-tests` BOSH errand. The errand exercises these operations:
 
-- S3 API health check
+- A health check on every node
+
 - Bucket create
-- Object put, get, and delete
+
+- Object put, get with content verification, and delete
+
+- A head request that expects a 404 after the delete
+
 - Bucket delete
+
+It signs every request with AWS Signature Version 4.
 
 Requires that the RustFS deployment is running and accessible from the BOSH
 director. The errand runs in `--keep-alive` mode so you can inspect the errand
@@ -230,9 +243,7 @@ Change `params.instances` in your environment file and redeploy:
 genesis deploy my-rustfs
 ```
 
-When scaling from 1 to N nodes, the cluster enters distributed mode and
-BOSH links wire peer discovery automatically. Data is not migrated between
-modes — plan topology before initial deploy.
+When scaling from 1 to N nodes, the cluster enters distributed mode and BOSH links wire peer discovery automatically. Data is not migrated between modes, so plan the topology before the first deploy.
 
 ### Certificate Rotation
 
@@ -275,11 +286,49 @@ Genesis manages three certificates via the `certificates` block in `kit.yml`:
 
 | Certificate | Vault Path | Validity | Purpose |
 |-------------|-----------|---------|---------|
-| CA | `certs/ca` | 10 years | Root CA; signs peer and API certs |
-| Peer | `certs/peer` | 10 years | Cluster mTLS between nodes |
-| API | `certs/api` | 2 years | Client-facing S3 TLS |
+| CA | `certs/ca` | 10 years | Root CA that signs the peer and API certificates, and that peers trust |
+| Peer | `certs/peer` | 10 years | Still rendered to the job, but RustFS 1.0 does not read it |
+| API | `certs/api` | 2 years | S3 API and internode TLS |
 
 The CA certificate is also exported to exodus for consumer kits.
+
+## TLS and Clusters
+
+The kit always sets the API certificate and key, so every node serves https only on port 9000 and refuses plaintext requests. RustFS serves internode RPC on that same port, and each node dials its peers at their IP addresses over https and verifies them against the kit's CA.
+
+That verification means every peer's API certificate must name the peer's own IP address. The kit's API certificate names only `rustfs_domain` and `127.0.0.1`, so a cluster built with it fails the TLS handshake between peers and never reaches quorum, and the deploy fails in post-start. A single node is not affected, because it never dials a peer. Until the kit generates certificates that carry the peer addresses, a cluster needs an API certificate whose subject alternative names include every node's static IP, stored at `certs/api` in the environment's vault path.
+
+## Resolute Stemcells
+
+The `resolute` feature deploys RustFS on an Ubuntu Resolute (26.04) stemcell instead of Noble. It sets `params.stemcell_os` to `ubuntu-resolute` and pins bpm 1.4.41, because earlier bpm releases do not compile on Resolute. Noble deployments stay on bpm 1.4.22.
+
+```yaml
+kit:
+  features:
+  - resolute
+```
+
+The blueprint refuses two settings that would leave the stemcell and bpm out of step. It refuses the `resolute` feature together with a `stemcell_os` other than `ubuntu-resolute`, and it refuses `stemcell_os: ubuntu-resolute` without the feature. In both cases we remove the `stemcell_os` parameter and let the feature choose.
+
+The pre-deploy hook then checks the merged manifest, because an environment file or a custom fragment can still override the stemcells or the bpm release. It refuses the deploy when any stemcell is not `ubuntu-resolute`, or when bpm is missing, `latest`, or older than 1.4.41.
+
+The director needs a Resolute stemcell before the deploy. Set `params.stemcell_version` to pin one, or leave it unset to take the latest that the director has. The cloud config hook needs no changes for Resolute, because none of its VM, disk, or network properties depend on the stemcell.
+
+## Feature Reference
+
+| Feature | Manifests Applied |
+|---------|-------------------|
+| `cluster` | `manifests/cluster.yml`, `manifests/releases/bosh-dns-aliases.yml` |
+| `route-registrar` | `manifests/route-registrar.yml`, `manifests/releases/routing.yml`, `manifests/releases/bosh-dns-aliases.yml` |
+| `ocfp` | `manifests/ocfp.yml` |
+| `scale-small` | `manifests/scale-small.yml` |
+| `scale-medium` | `manifests/scale-medium.yml` |
+| `scale-large` | `manifests/scale-large.yml` |
+| `upgrade-serial` | `manifests/upgrade-serial.yml` |
+| `upgrade-all-at-once` | `manifests/upgrade-all-at-once.yml` |
+| `resolute` | `manifests/resolute.yml`, `manifests/releases/bpm-resolute.yml` |
+
+IaaS overlays (`azure`, `stackit`) are applied automatically by the blueprint hook based on the detected IaaS type, so they do not need to be listed in `features:`.
 
 ## Exodus Exports
 

@@ -4,3 +4,4 @@ dev_releases/
 .genesis/
 *.swp
 .DS_Store
+manifests/network.dynamic.yml

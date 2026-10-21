@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The `resolute` feature deploys RustFS on the ubuntu-resolute (26.04) stemcell. It sets `params.stemcell_os` to `ubuntu-resolute` through `manifests/resolute.yml` and pins bpm 1.4.41 through `manifests/releases/bpm-resolute.yml`, because older bpm releases do not compile on resolute.
+
+- The blueprint refuses the `resolute` feature together with a `stemcell_os` other than `ubuntu-resolute`, and it refuses `stemcell_os: ubuntu-resolute` without the feature.
+
+- The pre-deploy hook checks the merged manifest of a resolute deploy. It refuses the deploy when any stemcell is not `ubuntu-resolute`, or when bpm is missing, `latest`, or older than 1.4.41.
+
+- The rustfs-server job receives the kit CA as `rustfs.tls.ca`, so cluster peers can verify each other over https.
+
+- A Go spec suite under `spec/` covers the base, cluster, cluster with `params.ips`, ocfp, resolute, resolute with ocfp and cluster, and resolute with route-registrar environments, plus both resolute refusals. `spec/hooks/pre-deploy.t` covers the merged-manifest check.
+
+### Changed
+
+- The kit pins the rustfs release to 0.2.0+dev.1, which carries RustFS 1.0.3. The final release's url and sha1 replace this dev pin once it is published.
+
+- `manifests/releases/bpm.yml` pins bpm 1.4.22 with its bosh.io url and sha1 instead of `latest`, because bpm 1.4.31 cannot start any process on a noble stemcell.
+
+- The check hook confirms the cloud config through the Genesis `has_entry` API, with ocfp-aware defaults for the vm type, network, and disk type. It used to call methods that do not exist.
+
+- The route-registrar check reads the CF exodus data of the environment with the same name, through `exodus_lookup`, and looks for the system domain, the core network, and the NATS client certificate and key that the manifest uses. It used to look for NATS password fields.
+
+- The check hook no longer queries the director for an ubuntu-noble stemcell. Genesis core checks every stemcell the manifest names, and honours `--no-stemcells`.
+
+- The static IP fragment merges after every feature fragment. Before this, `cluster` replaced `params.ips` with the cloud config's static range, and under `ocfp` it appended a second network to the rustfs instance group.
+
+- The instance count default lives in `meta.default.instances`, because graft fails `static_ips` when `instances` falls through to a literal default. Before this change, every environment failed to merge under graft. The cluster's exodus `cluster_size` now reads the instance group's count.
+
+- The kit requires the cloud config for the blueprint, manifest, and check hooks, since the manifest takes static IPs from the cloud config network.
+
+- The README and MANUAL describe RustFS 1.0.3, the resolute feature, the corrected defaults, and the TLS requirements of a cluster.
+
+### Known limitations
+
+- A cluster fails the TLS handshake between peers, because the API certificate names only `rustfs_domain` and `127.0.0.1`, and peers dial each other by IP address. Single-node deployments are not affected.
+
 ## 0.0.1 (2026-05-20) — initial pre-release scaffold
 
 Initial kit scaffold for RustFS 1.0.0-beta.3 (upstream pre-release).

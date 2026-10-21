@@ -5,17 +5,23 @@
 # up to 16 nodes. The static_ips operator only consumes as many addresses
 # as params.instances requires; the remainder are unused.
 #
-# WARNING: RustFS distributed mode is marked "Under Testing" in the
-# RustFS 1.0.0-beta.3 release. Do NOT use in production without
-# thorough validation. Single-node mode (instances: 1) is more stable.
+# Peers reach each other over https on the API port, so every peer's API
+# certificate must name that peer's IP address.  The kit's api certificate
+# names only the kit domain and 127.0.0.1, so a cluster that uses it
+# fails the TLS handshake between peers.  See the MANUAL before enabling
+# this feature.
+
+meta:
+  default:
+    instances: 3
 
 instance_groups:
 - name: rustfs
-  instances: (( grab params.instances || 3 ))
+  instances: (( grab params.instances || meta.default.instances ))
   networks:
   - name: (( grab params.rustfs_network || "rustfs" ))
     static_ips: (( static_ips 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 ))
 
 exodus:
   cluster:      true
-  cluster_size: (( grab params.instances || 3 ))
+  cluster_size: (( grab instance_groups.rustfs.instances ))

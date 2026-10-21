@@ -1,12 +1,5 @@
 # rustfs-genesis-kit
 
-> ⚠ **PRE-RELEASE WARNING** ⚠
->
-> RustFS is currently pre-release (1.0.0-beta.3 as of 2026-05).
-> Distributed/cluster mode is marked "Under Testing" upstream.
-> Use this kit for evaluation; do not assume API stability.
-> Defaults to single-instance deployment for safety.
-
 Deploy [RustFS](https://github.com/rustfs/rustfs) — an S3-compatible object
 storage server written in Rust — as a BOSH deployment using
 [Genesis](https://genesisproject.io).
@@ -21,7 +14,8 @@ discovery. No external coordination service is required.
 - Web console on port 9001
 - BOSH-link-driven cluster peer discovery — scale from 1 to N nodes
 - BPM process management
-- Ubuntu Noble (24.04) stemcell required (io_uring requires kernel ≥ 5.1)
+- RustFS 1.0.3 through the rustfs BOSH release 0.2.0+dev.1
+- Ubuntu Noble (24.04) stemcells by default, or Ubuntu Resolute (26.04) with the `resolute` feature
 - Optional Cloud Foundry route registration via `route-registrar` feature
 - Apache 2.0 license
 
@@ -33,6 +27,8 @@ Enable features in your environment file under `kit.features`:
 |---------|-------------|
 | `route-registrar` | Register S3 API and console routes with Cloud Foundry |
 | `ocfp` | OCFP-managed network, VM type, and disk type names |
+| `cluster` | Three or more nodes in distributed mode |
+| `resolute` | Ubuntu Resolute (26.04) stemcell with bpm 1.4.41 |
 | `scale-small` | Small VM footprint |
 | `scale-medium` | Medium VM footprint |
 | `scale-large` | Large VM footprint for high-throughput workloads |
@@ -43,6 +39,10 @@ kit reads CF system domain from CF exodus and registers two routes via
 
 **ocfp** derives resource names from the OCFP environment convention and
 provides IPs and AZs from OCFP subnet configuration.
+
+**cluster** deploys three nodes by default. Peers verify each other over TLS, so a cluster needs an API certificate that names every node's IP address. The [MANUAL](MANUAL.md#tls-and-clusters) explains why.
+
+**resolute** moves the deployment to the ubuntu-resolute stemcell and pins bpm 1.4.41. Leave `params.stemcell_os` unset when you use it, because the blueprint refuses a stemcell os that disagrees with the feature.
 
 **scale-small / scale-medium / scale-large** select pre-defined VM type sizes
 from your cloud config. Override with explicit `rustfs_vm_type` if needed.
@@ -81,30 +81,29 @@ Set `params.instances` to control cluster size:
 
 | Value | Mode | Notes |
 |-------|------|-------|
-| `1` | Single-node | Stable; no erasure coding or replication |
-| `3` | Cluster | Default; distributed mode (under testing upstream) |
+| `1` | Single-node | Default; no erasure coding or replication |
+| `3` | Cluster | Default with the `cluster` feature; distributed mode |
 | `N` | Cluster | N-node cluster; distributed mode |
 
-> Distributed mode is marked **Under Testing** by the RustFS project. Validate
-> thoroughly before using cluster mode for any persistent data.
+Upstream lists distributed mode as available from RustFS 1.0. We still recommend testing node failure and rejoin against your workload before a cluster holds important data.
 
 ## Properties
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `instances` | `3` | Number of RustFS instances |
-| `rustfs_domain` | `rustfs.bosh` | Internal BOSH DNS domain |
+| `instances` | `1` (`3` with `cluster`) | Number of RustFS instances |
+| `rustfs_domain` | `rustfs.bosh` | Domain in the API certificate and exodus |
 | `rustfs_network` | `rustfs` | BOSH network name |
 | `rustfs_vm_type` | `default` | BOSH VM type |
 | `rustfs_disk_type` | `default` | BOSH persistent disk type |
 | `availability_zones` | `[z1, z2, z3]` | BOSH AZs for instance spread |
-| `stemcell_os` | `ubuntu-noble` | Stemcell OS (do not change) |
+| `stemcell_os` | `ubuntu-noble` | Stemcell OS. Use the `resolute` feature rather than setting it. |
 | `stemcell_version` | `latest` | Stemcell version |
 | `log_level` | `info` | Log level: trace, debug, info, warn, error |
-| `rustfs_region` | `us-east-1` | S3 region string in API responses |
-| `rustfs_server_domains` | `""` | Virtual-hosted style domains |
-| `rustfs_disk_path` | `/var/vcap/store/rustfs` | Base path for data volumes |
-| `rustfs_volumes_per_node` | `4` | Sub-directories per node for erasure coding |
+| `rustfs_region` | `us-east-1` | S3 region the server reports |
+| `rustfs_server_domains` | `""` | Comma-separated virtual-hosted style domains |
+| `rustfs_disk_path` | `/var/vcap/store/rustfs-server` | Base path for data volumes |
+| `rustfs_volumes_per_node` | `1` | Data sub-directories per node. Keep at 1, because a BOSH instance has one persistent disk. |
 | `api_route_prefix` | `s3-api` | CF route prefix for S3 API (`route-registrar` only) |
 | `console_route_prefix` | `s3-console` | CF route prefix for web console (`route-registrar` only) |
 | `azure_availability_set` | `rustfs_as` | Azure availability set name (Azure only) |
