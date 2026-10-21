@@ -6,13 +6,20 @@ meta:
     # instances value falls through to a literal default.
     instances: 1
   domain: (( grab params.rustfs_domain || "rustfs.bosh" ))
+  # The host part of the exodus URLs.  The blueprint replaces it with the
+  # first known node address, bracketed when it is IPv6.  Without params.ips
+  # or ocfp, it falls back to the first static IP that BOSH assigns, which
+  # is not bracketed.
+  url_host:     (( grab instance_groups.rustfs.networks[0].static_ips[0] ))
+  api_port:     (( grab params.rustfs_port         || 9000 ))
+  console_port: (( grab params.rustfs_console_port || 9001 ))
 
 exodus:
   ips:            (( grab instance_groups.rustfs.networks[0].static_ips ))
   instances:      (( grab instance_groups.rustfs.instances ))
   domain:         (( grab meta.domain ))
-  s3_api_url:     (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9000" ))
-  s3_console_url: (( concat "https://" instance_groups.rustfs.networks[0].static_ips[0] ":9001" ))
+  s3_api_url:     (( concat "https://" meta.url_host ":" meta.api_port ))
+  s3_console_url: (( concat "https://" meta.url_host ":" meta.console_port ))
   ca:             (( vault meta.vault "/certs/ca:certificate" ))
   access_key:     (( vault meta.vault "/credentials:access_key" ))
 
@@ -40,8 +47,8 @@ instance_groups:
         secret_key:           (( vault meta.vault "/credentials:secret_key" ))
         region:               (( grab params.rustfs_region           || "us-east-1" ))
         log_level:            (( grab params.log_level               || "info" ))
-        port:                 (( grab params.rustfs_port             || 9000 ))
-        console_port:         (( grab params.rustfs_console_port     || 9001 ))
+        port:                 (( grab meta.api_port ))
+        console_port:         (( grab meta.console_port ))
         console_enable:       (( grab params.rustfs_console_enable   || true ))
         volumes_per_node:     (( grab params.rustfs_volumes_per_node || 1 ))
         server_domains:       (( grab params.rustfs_server_domains   || "" ))
@@ -104,9 +111,11 @@ instance_groups:
         access_key: (( vault meta.vault "/credentials:access_key" ))
         secret_key: (( vault meta.vault "/credentials:secret_key" ))
         region:     (( grab params.rustfs_region || "us-east-1" ))
-        port:       (( grab params.rustfs_port   || 9000 ))
+        port:       (( grab meta.api_port ))
+        # The errand verifies each node's certificate against the kit CA.
         tls:
           certificate: (( vault meta.vault "/certs/api:certificate" ))
+          ca:          (( vault meta.vault "/certs/ca:certificate" ))
       smoke_tests:
         timeout_secs: (( grab params.smoke_timeout_secs || 30 ))
 
