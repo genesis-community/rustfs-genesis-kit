@@ -125,13 +125,13 @@ This names the Azure availability set VM extension for RustFS nodes, and it has 
 When the `ocfp` feature is active, the kit computes the following params from the OCFP environment convention, and we should not set them manually.
 
 - `rustfs_network`
-Computed as `{env}.{type}.net-rustfs`
+The kit computes it as `{env}.{type}.net-rustfs`.
 
 - `rustfs_vm_type`
-Computed as `{env}.{type}.vm-rustfs`
+The kit computes it as `{env}.{type}.vm-rustfs`.
 
 - `rustfs_disk_type`
-Computed as `{env}.{type}.disk-rustfs`
+The kit computes it as `{env}.{type}.disk-rustfs`.
 
 ## Features
 
