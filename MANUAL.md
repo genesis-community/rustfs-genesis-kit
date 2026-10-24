@@ -1,8 +1,6 @@
 # RustFS Genesis Kit Manual
 
-The **RustFS Genesis Kit** deploys a RustFS cluster using BOSH-link peer
-discovery and BPM process management. RustFS is an S3-compatible object
-storage server written in Rust that implements the AWS S3 API.
+The **RustFS Genesis Kit** deploys a RustFS cluster using BOSH-link peer discovery and BPM process management. RustFS is an S3-compatible object storage server, written in Rust, that implements the AWS S3 API.
 
 This kit deploys RustFS 1.0.3 through the rustfs BOSH release 0.2.1. Upstream lists distributed mode as available from RustFS 1.0 onwards, but we still recommend testing node failure, restart, and rejoin against your own workload before a cluster holds important data. A single node has no redundancy, so keep an external backup of it.
 
@@ -30,7 +28,7 @@ This kit requires Genesis 3.1.0 or higher. It is currently at version 0.1.0.
 
 ## Overview
 
-RustFS exposes two ports on each node:
+RustFS exposes two ports on each node.
 
 - Port 9000 serves the S3-compatible API and internode RPC.
 
@@ -50,91 +48,102 @@ No operator-supplied config files are required. All parameters have defaults.
 
 ### Core
 
-- `instances` — Number of RustFS instances to deploy. Defaults to `1`, or to `3` when the `cluster` feature is on. Erasure coding spans nodes, so a cluster needs at least three of them, and the blueprint refuses exactly two. When `ips` is set, the kit deploys one node per address, and the blueprint refuses an `instances` value that disagrees with the list. The `ocfp` feature refuses this parameter, and `ocfp_instances` takes its place.
+- `instances`
+Number of RustFS instances to deploy. Defaults to `1`, or to `3` when the `cluster` feature is on. Erasure coding spans nodes, so a cluster needs at least three of them, and the blueprint refuses exactly two. When `ips` is set, the kit deploys one node per address, and the blueprint refuses an `instances` value that disagrees with the list. The `ocfp` feature refuses this parameter, and `ocfp_instances` takes its place.
 
-- `ocfp_instances` — Under the `ocfp` feature, the number of reserved `rustfs_ip` addresses to deploy nodes on, taken in subnet order. Defaults to every reservation.
+- `ocfp_instances`
+Under the `ocfp` feature, this sets the number of reserved `rustfs_ip` addresses to deploy nodes on, taken in subnet order. Defaults to every reservation.
 
-- `allow_node_count_change` — Set it to `true` to let the pre-deploy hook pass a deploy that changes the node count of a running deployment. Defaults to `false`. The nodes keep their old drive layout and refuse to start, so set it only when the drives no longer hold data that we need. It never allows growing a single node into a cluster.
+- `allow_node_count_change`
+Set it to `true` to let the pre-deploy hook pass a deploy that changes the node count of a running deployment. Defaults to `false`. The nodes keep their old drive layout and refuse to start, so set it only when the drives no longer hold data that we need. It never allows growing a single node into a cluster.
 
-- `rustfs_domain` — Domain name in the API certificate's subject alternative names, also exported to exodus as `domain`. Defaults to `rustfs.bosh`.
+- `rustfs_domain`
+This domain name goes into the API certificate's subject alternative names, and the kit also exports it to exodus as `domain`. Defaults to `rustfs.bosh`.
 
-- `rustfs_network` — BOSH network name to deploy into. This network must
-  be defined in your cloud config. Defaults to `rustfs`.
+- `rustfs_network`
+This is the BOSH network to deploy into, and it must be defined in your cloud config. Defaults to `rustfs`.
 
-- `rustfs_vm_type` — BOSH VM type for RustFS instances. Must exist in your
-  cloud config. Defaults to `default`.
+- `rustfs_vm_type`
+This is the BOSH VM type for RustFS instances, and it must exist in your cloud config. Defaults to `default`.
 
-- `rustfs_disk_type` — Persistent disk type for RustFS data. Must exist in
-  your cloud config. Defaults to `default`. Object storage requires
-  substantial disk; provision accordingly.
+- `rustfs_disk_type`
+This is the persistent disk type for RustFS data, and it must exist in your cloud config. Defaults to `default`. Object storage needs substantial disk, so we provision it accordingly.
 
-- `ips` — Explicit list of static IP addresses to assign to instances. When set, the number of instances is derived from the length of this list, and the API certificate names every address in it. Each entry must be a single IPv4 or IPv6 address, not a range, and the list can hold at most 16 addresses. When not set, `instances` controls the count, and the manifest takes the first static IP in the network's static range. That fallback serves a single node only, because the blueprint refuses a cluster without this list unless the `ocfp` feature supplies the addresses. Even a single node should list its address here when clients outside the deployment verify its certificate, because without the list the certificate names only `rustfs_domain` and `127.0.0.1`. The `ocfp` feature refuses this parameter, because its subnet reservations supply the addresses.
+- `ips`
+This is an explicit list of static IP addresses to assign to instances. When set, the number of instances is derived from the length of this list, and the API certificate names every address in it. Each entry must be a single IPv4 or IPv6 address, not a range, and the list can hold at most 16 addresses. When not set, `instances` controls the count, and the manifest takes the first static IP in the network's static range. That fallback serves a single node only, because the blueprint refuses a cluster without this list unless the `ocfp` feature supplies the addresses. Even a single node should list its address here when clients outside the deployment verify its certificate, because without the list the certificate names only `rustfs_domain` and `127.0.0.1`. The `ocfp` feature refuses this parameter, because its subnet reservations supply the addresses.
 
-- `availability_zones` — BOSH AZs to spread instances across. The chosen
-  network must have subnets in each listed zone. Defaults to `[z1, z2, z3]`.
+- `availability_zones`
+These are the BOSH AZs to spread instances across, and the chosen network must have subnets in each listed zone. Defaults to `[z1, z2, z3]`.
 
-- `stemcell_os` — Stemcell OS to deploy on. Defaults to `ubuntu-noble` (Ubuntu 24.04). Leave it unset and enable the `resolute` feature to deploy on Ubuntu Resolute, because the blueprint refuses `ubuntu-resolute` without the feature and refuses any other value with it.
+- `stemcell_os`
+This is the stemcell OS to deploy on. Defaults to `ubuntu-noble` (Ubuntu 24.04). Leave it unset and enable the `resolute` feature to deploy on Ubuntu Resolute, because the blueprint refuses `ubuntu-resolute` without the feature and refuses any other value with it.
 
-- `stemcell_version` — Specific stemcell version. Defaults to `latest`.
+- `stemcell_version`
+This pins a specific stemcell version. Defaults to `latest`.
 
 ### RustFS Configuration
 
-- `log_level` — RustFS server log level. Valid values: `trace`, `debug`,
-  `info`, `warn`, `error`. Defaults to `info`.
+- `log_level`
+This sets the RustFS server log level to `trace`, `debug`, `info`, `warn`, or `error`. Defaults to `info`.
 
-- `rustfs_region` — S3 region the server reports, for example in `GetBucketLocation`. Defaults to `us-east-1`. RustFS accepts requests signed for any region.
+- `rustfs_region`
+S3 region the server reports, for example in `GetBucketLocation`. Defaults to `us-east-1`. RustFS accepts requests signed for any region.
 
-- `rustfs_server_domains` — Comma-separated list of domains for virtual-hosted
-  style bucket addressing (e.g., `example.com`). Defaults to empty string
-  (path-style addressing only).
+- `rustfs_server_domains`
+This is a comma-separated list of domains for virtual-hosted style bucket addressing, such as `example.com`. Defaults to an empty string, which allows path-style addressing only.
 
-- `rustfs_disk_path` — Filesystem path for RustFS data volumes on each node. Defaults to `/var/vcap/store/rustfs-server`.
+- `rustfs_disk_path`
+This is the filesystem path for RustFS data volumes on each node. Defaults to `/var/vcap/store/rustfs-server`.
 
-- `rustfs_volumes_per_node` — Number of data sub-directories per node. Defaults to `1`, and it should stay there. RustFS requires each local data volume to live on its own physical disk, and a BOSH instance has one persistent disk, so a higher value fails at startup.
+- `rustfs_volumes_per_node`
+This sets the number of data sub-directories per node. Defaults to `1`, and it should stay there. RustFS requires each local data volume to live on its own physical disk, and a BOSH instance has one persistent disk, so a higher value fails at startup.
 
-- `rustfs_port` — S3 API listen port. Defaults to `9000`.
+- `rustfs_port`
+This is the S3 API listen port. Defaults to `9000`.
 
-- `rustfs_console_port` — Web console listen port. Defaults to `9001`.
+- `rustfs_console_port`
+This is the web console listen port. Defaults to `9001`.
 
-- `rustfs_console_enable` — Enable the web console UI. Defaults to `true`.
+- `rustfs_console_enable`
+This enables the web console UI. Defaults to `true`.
 
 ### Route Registrar (feature: route-registrar)
 
-- `api_route_prefix` — CF route prefix for the S3 API. Registered as
-  `{prefix}.{system_domain}`. Defaults to `s3-api`.
+- `api_route_prefix`
+This is the CF route prefix for the S3 API, and the kit registers it as `{prefix}.{system_domain}`. Defaults to `s3-api`.
 
-- `console_route_prefix` — CF route prefix for the web console. Registered
-  as `{prefix}.{system_domain}`. Defaults to `s3-console`.
+- `console_route_prefix`
+This is the CF route prefix for the web console, and the kit registers it as `{prefix}.{system_domain}`. Defaults to `s3-console`.
 
 ### Azure-specific
 
-- `azure_availability_set` — Name of the Azure availability set VM extension
-  for RustFS nodes. Has no effect on non-Azure platforms. Defaults to
-  `rustfs_as`.
+- `azure_availability_set`
+This names the Azure availability set VM extension for RustFS nodes, and it has no effect on non-Azure platforms. Defaults to `rustfs_as`.
 
 ### OCFP (feature: ocfp)
 
-When the `ocfp` feature is active, the following params are computed
-automatically from the OCFP environment convention and should not be set
-manually:
+When the `ocfp` feature is active, the kit computes the following params from the OCFP environment convention, and we should not set them manually.
 
-- `rustfs_network` — Computed as `{env}.{type}.net-rustfs`
-- `rustfs_vm_type` — Computed as `{env}.{type}.vm-rustfs`
-- `rustfs_disk_type` — Computed as `{env}.{type}.disk-rustfs`
+- `rustfs_network`
+Computed as `{env}.{type}.net-rustfs`
+
+- `rustfs_vm_type`
+Computed as `{env}.{type}.vm-rustfs`
+
+- `rustfs_disk_type`
+Computed as `{env}.{type}.disk-rustfs`
 
 ## Features
 
 ### route-registrar
 
-Registers S3 API and web console routes with Cloud Foundry via
-`route_registrar`. Requires:
+This feature registers the S3 API and web console routes with Cloud Foundry through `route_registrar`. It requires two things.
 
 - CF deployed in the same BOSH director
+
 - CF system domain readable from CF exodus at deploy time
 
-The feature adds a `route_registrar` job and `bosh-dns-aliases` job to each
-RustFS instance. The bosh-dns-aliases job enables NATS TLS resolution using
-CF NATS credentials from CF exodus.
+The feature adds a `route_registrar` job and a `bosh-dns-aliases` job to each RustFS instance. The bosh-dns-aliases job enables NATS TLS resolution using the CF NATS credentials from CF exodus.
 
 Two routes are registered:
 
@@ -170,24 +179,21 @@ The RustFS kit publishes its CA in the exodus key `ca`, and the CF deployment re
 
 When we renew certificates with `rotate-secrets`, the CA stays the same and CF needs nothing. When we replace the CA with `--regen-x509-keys`, we deploy CF again after the RustFS deploy, so that gorouter picks up the new CA.
 
-
 The `check` hook confirms that the CF exodus data holds the system domain, the core network, and the NATS client certificate and key before the deploy, and it names each one that is missing.
 
 ### ocfp
 
-Enables OCFP-managed infrastructure naming conventions. When active:
+This feature enables the OCFP-managed infrastructure naming conventions. When it is active, the following changes apply.
 
-- Network, VM type, and disk type names are derived from the OCFP environment
-  convention rather than the `default` fallback.
-- The blueprint hook generates a dynamic network overlay using OCFP subnet
-  configuration to supply static IP addresses and AZs.
+- Network, VM type, and disk type names come from the OCFP environment convention rather than the `default` fallback.
+
+- The blueprint hook generates a dynamic network overlay that uses the OCFP subnet configuration to supply static IP addresses and AZs.
 
 - The node count comes from the `rustfs_ip` reservations, one node per subnet, and `params.ocfp_instances` can deploy fewer. The blueprint refuses `params.ips` and `params.instances`, which the overlay would otherwise replace without a word.
 
 - The exodus data carries `cluster` and `cluster_size` whether or not the `cluster` feature is on.
 
-- Requires an OCFP-initialized director with appropriate subnets and cloud
-  config.
+- The feature requires an OCFP-initialized director with appropriate subnets and cloud config.
 
 ### cluster
 
@@ -199,19 +205,15 @@ Deploys RustFS on an Ubuntu Resolute (26.04) stemcell. The [Resolute Stemcells](
 
 ### scale-small
 
-Applies a `scale-small` manifest overlay that configures a smaller VM type
-suitable for development or low-throughput workloads. Requires a matching
-`scale-small` VM type in your cloud config.
+This feature applies a `scale-small` manifest overlay that configures a smaller VM type, which suits development or low-throughput workloads. It requires a matching `scale-small` VM type in your cloud config.
 
 ### scale-medium
 
-Applies a `scale-medium` manifest overlay. Suitable for moderate workloads.
-Requires a matching VM type in cloud config.
+This feature applies a `scale-medium` manifest overlay, which suits moderate workloads. It requires a matching VM type in the cloud config.
 
 ### scale-large
 
-Applies a `scale-large` manifest overlay for high-throughput object storage
-workloads. Requires a matching VM type in cloud config.
+This feature applies a `scale-large` manifest overlay for high-throughput object storage workloads. It requires a matching VM type in the cloud config.
 
 ## Addons
 
@@ -221,7 +223,7 @@ workloads. Requires a matching VM type in cloud config.
 genesis my-rustfs do smoke
 ```
 
-Runs the `smoke-tests` BOSH errand. The errand exercises these operations:
+This addon runs the `smoke-tests` BOSH errand, which exercises these operations.
 
 - A health check on every node
 
@@ -235,9 +237,7 @@ Runs the `smoke-tests` BOSH errand. The errand exercises these operations:
 
 It signs every request with AWS Signature Version 4.
 
-Requires that the RustFS deployment is running and accessible from the BOSH
-director. The errand runs in `--keep-alive` mode so you can inspect the errand
-VM if it fails.
+The RustFS deployment must be running and reachable from the BOSH director. The errand runs in `--keep-alive` mode, so we can inspect the errand VM if it fails.
 
 ### reset-credentials (r)
 
@@ -280,9 +280,7 @@ The addon needs `mc` (or `mcli`) on the `PATH`. MinIO no longer publishes `mc` b
 
 ### First Deploy
 
-On first deploy Genesis generates the TLS certificates (CA, peer, API) and
-admin credentials (`access_key`, `secret_key`) automatically. No manual
-vault setup is required.
+On the first deploy, Genesis generates the TLS certificates (CA, peer, and API) and the admin credentials (`access_key` and `secret_key`) automatically. No manual vault setup is required.
 
 ### Scaling
 
@@ -445,21 +443,18 @@ We rotate the credentials with the [reset-credentials](#reset-credentials-r) add
 
 ### Accessing the Console
 
-Navigate to `https://{node_ip}:9001` or `https://s3-console.{system_domain}`
-(if `route-registrar` is active). Log in with the `access_key` and
-`secret_key` from vault.
+We open `https://{node_ip}:9001`, or `https://s3-console.{system_domain}` when `route-registrar` is active, and log in with the `access_key` and `secret_key` from vault.
 
 ## Credentials
 
-Genesis generates and stores admin credentials in vault at:
+Genesis generates the admin credentials and stores them in vault at these paths.
 
 ```
 {vault_mount}/{env}/rustfs/credentials/access_key
 {vault_mount}/{env}/rustfs/credentials/secret_key
 ```
 
-If these paths are absent at deploy time, Genesis generates random values.
-Retrieve them with:
+If these paths are absent at deploy time, Genesis generates random values. We retrieve them with this command.
 
 ```bash
 safe get secret/{env}/rustfs/credentials
@@ -467,7 +462,7 @@ safe get secret/{env}/rustfs/credentials
 
 ## Certificates
 
-Genesis manages three certificates via the `certificates` block in `kit.yml`:
+Genesis manages three certificates through the `certificates` block in `kit.yml`.
 
 | Certificate | Vault Path | Validity | Purpose |
 |-------------|-----------|---------|---------|
@@ -489,7 +484,7 @@ The manifest sets the deployment feature `use_dns_addresses: false`, so BOSH lin
 
 When the static IPs change, the certificate needs the new names before the deploy. `genesis check-secrets` warns about the certificate and lists each missing address, and `genesis rotate-secrets certs/api` renews it, as [Scaling](#scaling) describes.
 
-After a successful deploy, the post-deploy hook probes `/health/ready` on every node over https. It dials each node at its own IP address, the name that peers and clients use, and verifies the certificate against the kit CA on the node with that address as the name. When the kit knows no address list, as for a single node without `params.ips`, the certificate names only `127.0.0.1`, so the hook dials that instead and says so. It reports one of these results for each node:
+After a successful deploy, the post-deploy hook probes `/health/ready` on every node over https. It dials each node at its own IP address, the name that peers and clients use, and verifies the certificate against the kit CA on the node with that address as the name. When the kit knows no address list, as for a single node without `params.ips`, the certificate names only `127.0.0.1`, so the hook dials that instead and says so. It reports one of these results for each node.
 
 - The node is ready, and its certificate verified against the kit CA.
 
@@ -537,7 +532,7 @@ IaaS overlays (`azure`, `stackit`) are applied automatically by the blueprint ho
 
 ## Exodus Exports
 
-Downstream kits and operators can read the following keys from RustFS exodus:
+Downstream kits and operators can read the following keys from RustFS exodus.
 
 | Key | Description |
 |-----|-------------|

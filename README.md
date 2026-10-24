@@ -1,27 +1,30 @@
 # rustfs-genesis-kit
 
-Deploy [RustFS](https://github.com/rustfs/rustfs) — an S3-compatible object
-storage server written in Rust — as a BOSH deployment using
-[Genesis](https://genesisproject.io).
+This kit deploys [RustFS](https://github.com/rustfs/rustfs), an S3-compatible object storage server written in Rust, as a BOSH deployment using [Genesis](https://genesisproject.io).
 
-RustFS implements the S3 API and provides a web console UI. It scales from a
-single-node deployment to a distributed cluster using BOSH-link peer
-discovery. No external coordination service is required.
+RustFS implements the S3 API and provides a web console UI. It scales from a single-node deployment to a distributed cluster using BOSH-link peer discovery, and it needs no external coordination service.
 
 ## Overview
 
 - S3-compatible API on port 9000
+
 - Web console on port 9001
+
 - BOSH-link-driven cluster peer discovery, for a single node or a cluster of three or more nodes
+
 - BPM process management
+
 - RustFS 1.0.3 through the rustfs BOSH release 0.2.1
+
 - Ubuntu Noble (24.04) stemcells by default, or Ubuntu Resolute (26.04) with the `resolute` feature
-- Optional Cloud Foundry route registration via `route-registrar` feature
+
+- Optional Cloud Foundry route registration through the `route-registrar` feature
+
 - Apache 2.0 license
 
 ## Features
 
-Enable features in your environment file under `kit.features`:
+We enable features in the environment file under `kit.features`.
 
 | Feature | Description |
 |---------|-------------|
@@ -41,8 +44,7 @@ Enable features in your environment file under `kit.features`:
 
 **resolute** moves the deployment to the ubuntu-resolute stemcell and pins bpm 1.4.41. Leave `params.stemcell_os` unset when you use it, because the blueprint refuses a stemcell os that disagrees with the feature.
 
-**scale-small / scale-medium / scale-large** select pre-defined VM type sizes
-from your cloud config. Override with explicit `rustfs_vm_type` if needed.
+**scale-small / scale-medium / scale-large** select pre-defined VM type sizes from your cloud config. Override them with an explicit `rustfs_vm_type` if needed.
 
 ## Quick Start
 
@@ -53,7 +55,7 @@ genesis deploy my-rustfs
 
 The wizard asks for the node count, and outside ocfp it asks for each node's static IP address, the network, the VM type, the disk type, and the availability zones. With the `route-registrar` feature it also asks for the route prefixes.
 
-After deployment, retrieve credentials and endpoint info:
+After the deployment finishes, we retrieve the credentials and endpoint information with this command.
 
 ```bash
 genesis info my-rustfs
@@ -61,15 +63,14 @@ genesis info my-rustfs
 
 ## Routes
 
-When using the `route-registrar` feature:
+With the `route-registrar` feature, the kit registers these routes.
 
 | Route | TLS port | Purpose |
 |-------|----------|---------|
 | `s3-api.{system_domain}` | `rustfs_port`, 9000 by default | S3 API endpoint |
 | `s3-console.{system_domain}` | `rustfs_console_port`, 9001 by default | Web console UI |
 
-Customize route prefixes with `params.api_route_prefix` and
-`params.console_route_prefix`.
+Customize the route prefixes with `params.api_route_prefix` and `params.console_route_prefix`.
 
 ## Scaling
 
@@ -110,12 +111,11 @@ Upstream lists distributed mode as available from RustFS 1.0. We still recommend
 | `console_route_prefix` | `s3-console` | CF route prefix for web console (`route-registrar` only) |
 | `azure_availability_set` | `rustfs_as` | Azure availability set name (Azure only) |
 
-See [MANUAL.md](MANUAL.md) for the complete parameter reference, platform
-notes, credential management, and certificate lifecycle details.
+See [MANUAL.md](MANUAL.md) for the complete parameter reference, platform notes, credential management, and certificate lifecycle details.
 
 ## Addons
 
-Run addons with `genesis my-rustfs do <addon>`:
+We run addons with `genesis my-rustfs do <addon>`.
 
 | Addon | Shortcut | Description |
 |-------|----------|-------------|
@@ -125,8 +125,7 @@ Run addons with `genesis my-rustfs do <addon>`:
 
 ## Vault Credential Paths
 
-Genesis generates and stores admin credentials in vault automatically on first
-deploy. Paths relative to `{vault_mount}/{env}/rustfs/`:
+Genesis generates the admin credentials and stores them in vault automatically on the first deploy. The following paths are relative to `{vault_mount}/{env}/rustfs/`.
 
 | Path | Description |
 |------|-------------|
